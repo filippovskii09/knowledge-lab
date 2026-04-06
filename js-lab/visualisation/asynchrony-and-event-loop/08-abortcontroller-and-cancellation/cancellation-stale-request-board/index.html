@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Cancellation + Stale Request Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board { display:grid; grid-template-columns:380px 1fr; gap:20px; flex:1; min-height:0; }
+    .panel { background:#fff; border:2px solid var(--color-border); border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,.08); padding:16px; overflow:auto; }
+    .section-title { margin:0 0 12px; color:var(--color-stack); font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .row { display:grid; grid-template-columns:140px 1fr; gap:10px; align-items:center; margin-bottom:10px; }
+    .label { font-family:Consolas, monospace; font-size:13px; color:#415a77; font-weight:700; }
+    select { width:100%; padding:8px 10px; border:1px solid #c8d3dd; border-radius:6px; background:#f8fafc; font-size:14px; }
+    .toolbar, .preset-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn, .preset-btn { padding:8px 12px; border:none; border-radius:6px; background:var(--color-stack); color:#fff; cursor:pointer; font-weight:700; }
+    .btn.alt { background:#6c7a89; }
+    .preset-btn { background:#f8fafc; color:#243b53; border:1px solid #c8d3dd; font-size:13px; padding:6px 10px; }
+    .box { border:1px solid #d9e2ec; border-radius:8px; background:#f8fafc; padding:12px; margin-bottom:14px; }
+    .box-title { margin:0 0 8px; font-size:13px; text-transform:uppercase; color:#486581; font-weight:700; letter-spacing:.04em; }
+    .pill-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-family:Consolas, monospace; font-size:13px; font-weight:700; border:1px solid transparent; }
+    .req1-pill { background:#e2f3ff; color:#0b4f79; border-color:#8ec9f0; }
+    .req2-pill { background:#ece8ff; color:#4d3ca6; border-color:#b9b0f3; }
+    .abort-pill { background:#ffe1e1; color:#8b1e1e; border-color:#f3b1b1; }
+    .guard-pill { background:#e8f7ec; color:#166534; border-color:#9fd8af; }
+    .warn-pill { background:#fff1d6; color:#8a5a00; border-color:#f1cf80; }
+    .timeline { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; }
+    .step { border:1px solid #d9e2ec; border-radius:8px; background:#fff; min-height:170px; padding:10px; }
+    .step h4 { margin:0 0 8px; font-size:13px; color:#243b53; }
+    .event { font-size:12px; border-radius:6px; padding:5px 7px; margin-bottom:5px; border:1px solid #d9e2ec; background:#f8fafc; color:#243b53; font-family:Consolas, monospace; }
+    .event.req1 { background:#e7f4ff; }
+    .event.req2 { background:#f0ecff; }
+    .event.abort { background:#ffe9e9; }
+    .event.guard { background:#edf9f0; }
+    .event.warn { background:#fff6e2; }
+    .code-preview { background:var(--code-bg); color:var(--code-text); border-radius:8px; padding:14px; font-family:Consolas, monospace; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+    .explain-list { margin:0; padding-left:20px; }
+    .muted { color:#7b8794; font-size:14px; }
+    @media (max-width: 1100px) { .board { grid-template-columns:1fr; } .timeline { grid-template-columns:1fr 1fr; } }
+    @media (max-width: 640px) { .timeline { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Cancellation + Stale Request Board</h2>
+    <p>Моделюй race між двома запитами, `AbortController`, latest-only guard і дивись, коли stale response все ще може оновити UI</p>
+  </div>
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Scenario</h3>
+        <div class="row"><div class="label">Request A</div><select id="req1Select"><option value="slow">Slow response</option><option value="fast">Fast response</option></select></div>
+        <div class="row"><div class="label">Request B</div><select id="req2Select"><option value="fast">Fast response</option><option value="slow">Slow response</option></select></div>
+        <div class="row"><div class="label">Abort old</div><select id="abortSelect"><option value="yes">Abort previous request</option><option value="no">Do not abort</option></select></div>
+        <div class="row"><div class="label">Latest guard</div><select id="guardSelect"><option value="yes">Use latest-only guard</option><option value="no">No guard</option></select></div>
+        <div class="row"><div class="label">Reuse signal</div><select id="reuseSelect"><option value="no">New controller per request</option><option value="yes">Reuse old aborted signal</option></select></div>
+        <div class="row"><div class="label">State check</div><select id="stateSelect"><option value="yes">Check signal/lifecycle before render</option><option value="no">No post-await check</option></select></div>
+        <div class="toolbar">
+          <button id="analyzeBtn" class="btn">Analyze</button>
+          <button id="resetBtn" class="btn alt">Reset</button>
+        </div>
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="stale-overwrite">Stale Overwrite</button>
+          <button class="preset-btn" data-preset="abort-only">Abort Only</button>
+          <button class="preset-btn" data-preset="guard-only">Guard Only</button>
+          <button class="preset-btn" data-preset="reused-signal">Reused Signal Bug</button>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <h4 class="box-title">Mental Model</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">Cancellation і latest-only guard вирішують різні частини проблеми. Abort зупиняє частину старого flow раніше. Guard захищає UI від stale completion навіть коли abort неможливий або запізнився.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+        <div class="box"><h4 class="box-title">Verdict</h4><div id="verdict" class="pill-list"></div></div>
+        <div class="box"><h4 class="box-title">Timeline</h4><div id="timeline" class="timeline"></div></div>
+        <div class="box"><h4 class="box-title">Why</h4><ol id="whyList" class="explain-list"></ol></div>
+        <div class="box"><h4 class="box-title">Warnings</h4><div id="warningList" class="muted"></div></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const req1Select = document.getElementById('req1Select');
+    const req2Select = document.getElementById('req2Select');
+    const abortSelect = document.getElementById('abortSelect');
+    const guardSelect = document.getElementById('guardSelect');
+    const reuseSelect = document.getElementById('reuseSelect');
+    const stateSelect = document.getElementById('stateSelect');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const codePreview = document.getElementById('codePreview');
+    const verdict = document.getElementById('verdict');
+    const timeline = document.getElementById('timeline');
+    const whyList = document.getElementById('whyList');
+    const warningList = document.getElementById('warningList');
+
+    const presets = {
+      'stale-overwrite': { req1: 'slow', req2: 'fast', abort: 'no', guard: 'no', reuse: 'no', state: 'no' },
+      'abort-only': { req1: 'slow', req2: 'fast', abort: 'yes', guard: 'no', reuse: 'no', state: 'no' },
+      'guard-only': { req1: 'slow', req2: 'fast', abort: 'no', guard: 'yes', reuse: 'no', state: 'yes' },
+      'reused-signal': { req1: 'slow', req2: 'fast', abort: 'yes', guard: 'yes', reuse: 'yes', state: 'yes' }
+    };
+
+    function buildCode(cfg) {
+      const lines = [];
+      lines.push('let controller;');
+      if (cfg.guard === 'yes') lines.push('let active = 0;');
+      lines.push('');
+      lines.push('async function search(query) {');
+      if (cfg.guard === 'yes') lines.push('  const id = ++active;');
+      if (cfg.abort === 'yes') lines.push('  controller?.abort();');
+      if (cfg.reuse === 'yes') lines.push('  controller = controller || new AbortController();');
+      else lines.push('  controller = new AbortController();');
+      lines.push('  const response = await fetch(`/search?q=${query}`, { signal: controller.signal });');
+      lines.push('  const data = await response.json();');
+      if (cfg.state === 'yes') lines.push('  if (controller.signal.aborted) return;');
+      if (cfg.guard === 'yes') lines.push('  if (id !== active) return;');
+      lines.push('  render(data);');
+      lines.push('}');
+      return lines.join('\n');
+    }
+
+    function makeSteps() {
+      return [0,1,2,3,4].map(i => ({ title: `Step ${i+1}`, items: [] }));
+    }
+    function add(stepList, idx, text, cls) {
+      if (idx < 0 || idx >= stepList.length) return;
+      stepList[idx].items.push({ text, cls });
+    }
+    function renderSteps(steps) {
+      timeline.innerHTML = '';
+      steps.forEach(step => {
+        const node = document.createElement('div');
+        node.className = 'step';
+        node.innerHTML = `<h4>${step.title}</h4>${(step.items.length ? step.items : [{ text: '—', cls: 'warn' }]).map(i => `<div class="event ${i.cls}">${i.text}</div>`).join('')}`;
+        timeline.appendChild(node);
+      });
+    }
+
+    function analyze() {
+      const cfg = {
+        req1: req1Select.value,
+        req2: req2Select.value,
+        abort: abortSelect.value,
+        guard: guardSelect.value,
+        reuse: reuseSelect.value,
+        state: stateSelect.value
+      };
+      const steps = makeSteps();
+      const why = [];
+      const warnings = [];
+      const pills = [];
+
+      add(steps, 0, 'User types query A', 'req1');
+      add(steps, 0, `Request A starts (${cfg.req1})`, 'req1');
+      add(steps, 1, 'User types query B', 'req2');
+      if (cfg.abort === 'yes') add(steps, 1, 'Abort controller for A', 'abort');
+      add(steps, 1, `Request B starts (${cfg.req2})`, 'req2');
+
+      if (cfg.reuse === 'yes') {
+        add(steps, 1, 'B reuses aborted signal', 'abort');
+        warnings.push('Повторне використання вже aborted signal ламає новий request відразу. На кожен новий request потрібен новий controller.');
+        pills.push({ text: 'reused signal bug', cls: 'warn-pill' });
+      }
+
+      const firstComplete = cfg.reuse === 'yes'
+        ? 'A'
+        : (cfg.req1 === 'fast' && cfg.req2 === 'slow' ? 'A' : cfg.req1 === 'slow' && cfg.req2 === 'fast' ? 'B' : 'A');
+      const secondComplete = firstComplete === 'A' ? 'B' : 'A';
+
+      if (cfg.reuse !== 'yes') {
+        add(steps, 2, `Request ${firstComplete} completes first`, firstComplete === 'A' ? 'req1' : 'req2');
+        add(steps, 3, `Request ${secondComplete} completes later`, secondComplete === 'A' ? 'req1' : 'req2');
+      } else {
+        add(steps, 2, 'Request B aborts immediately', 'abort');
+        add(steps, 3, 'Only A may still resolve', 'req1');
+      }
+
+      let stalePossible = false;
+      let bBlocked = cfg.reuse === 'yes';
+      let aBlocked = false;
+
+      if (cfg.abort === 'yes' && cfg.reuse !== 'yes') {
+        aBlocked = true;
+        why.push('AbortController намагається припинити старий flow раніше, щоб A не дійшов до render path.');
+        pills.push({ text: 'old request aborted', cls: 'abort-pill' });
+      }
+      if (cfg.guard === 'yes') {
+        why.push('Latest-only guard не дає старому completion path оновити UI, навіть якщо network ordering виявився невигідним.');
+        pills.push({ text: 'latest-only guard', cls: 'guard-pill' });
+      }
+      if (cfg.state === 'yes') {
+        why.push('Post-await state/signal check страхує фінальний render path, якщо lifetime уже змінився до моменту state update.');
+      }
+
+      if (cfg.reuse === 'yes') {
+        why.push('Signal після `abort()` залишається aborted. Його не можна "перезапустити" для нового request.');
+      } else if (cfg.abort === 'no' && cfg.guard === 'no') {
+        stalePossible = cfg.req1 === 'slow' && cfg.req2 === 'fast';
+        why.push('Без abort і без guard старий slow request може завершитися пізніше та перезаписати новіші дані.');
+        pills.push({ text: 'stale overwrite risk', cls: 'warn-pill' });
+      } else if (cfg.abort === 'yes' && cfg.guard === 'no') {
+        warnings.push('Abort часто допомагає, але без guard UI все одно краще захищати на випадок не-ideal timing або non-abort-aware flows.');
+      } else if (cfg.abort === 'no' && cfg.guard === 'yes') {
+        warnings.push('Guard захищає UI, але старий request усе ще витрачає мережу і ресурси до завершення.');
+      }
+
+      if (!bBlocked) add(steps, 4, 'UI renders result B', 'req2');
+      if (stalePossible && !aBlocked) add(steps, 4, 'UI later overwritten by stale A', 'warn');
+      else if (aBlocked) add(steps, 4, 'A blocked before stale render', 'guard');
+      else if (cfg.guard === 'yes' && cfg.req1 === 'slow' && cfg.req2 === 'fast') add(steps, 4, 'A ignored by guard on completion', 'guard');
+      if (cfg.reuse === 'yes') add(steps, 4, 'B never gets valid result path', 'abort');
+
+      if (cfg.req1 === 'slow' && cfg.req2 === 'fast') {
+        why.push('Саме сценарій slow A / fast B найкраще показує stale-request race: новіший intent завершується раніше, але старіший може прийти пізніше і зламати UI.');
+      }
+      if (cfg.abort === 'yes' && cfg.guard === 'yes' && cfg.reuse === 'no') {
+        pills.push({ text: 'robust pattern', cls: 'guard-pill' });
+      }
+
+      codePreview.textContent = buildCode(cfg);
+      verdict.innerHTML = pills.length ? pills.map(p => `<span class="pill ${p.cls}">${p.text}</span>`).join('') : '<span class="pill req1-pill">context-dependent</span>';
+      renderSteps(steps);
+      whyList.innerHTML = why.map(x => `<li>${x}</li>`).join('');
+      warningList.innerHTML = warnings.length ? warnings.map(x => `<span class="pill warn-pill">${x}</span>`).join(' ') : 'No extra warnings for this scenario.';
+    }
+
+    function reset() {
+      req1Select.value = 'slow';
+      req2Select.value = 'fast';
+      abortSelect.value = 'yes';
+      guardSelect.value = 'yes';
+      reuseSelect.value = 'no';
+      stateSelect.value = 'yes';
+      analyze();
+    }
+
+    document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
+      const p = presets[btn.dataset.preset];
+      req1Select.value = p.req1;
+      req2Select.value = p.req2;
+      abortSelect.value = p.abort;
+      guardSelect.value = p.guard;
+      reuseSelect.value = p.reuse;
+      stateSelect.value = p.state;
+      analyze();
+    }));
+
+    analyzeBtn.addEventListener('click', analyze);
+    resetBtn.addEventListener('click', reset);
+    reset();
+  </script>
+</body>
+</html>
