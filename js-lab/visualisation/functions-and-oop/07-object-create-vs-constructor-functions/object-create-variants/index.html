@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Object.create Variants</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .var { color: #e06c75; }
+    .str { color: #98c379; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 230px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .card.active {
+      border-color: #e67e22;
+      background: #fff4e6;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Object.create(null) vs {} vs Object.create(proto)</h2>
+  <p>Покроково: три способи створення object дають три різні lookup-моделі через різний prototype setup.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex:1.02;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">plain</span> <span class="op">=</span> {}<span class="op">;</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">safeDict</span> <span class="op">=</span> <span class="fn">Object</span>.<span class="fn">create</span>(<span class="kw">null</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">const</span> <span class="var">proto</span> <span class="op">=</span> { <span class="var">greet</span>: <span class="str">"hi"</span> }<span class="op">;</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="kw">const</span> <span class="var">delegated</span> <span class="op">=</span> <span class="fn">Object</span>.<span class="fn">create</span>(<span class="var">proto</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="var">plain</span>.<span class="fn">toString</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="var">safeDict</span>.<span class="fn">toString</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="var">delegated</span>.<span class="var">greet</span><span class="op">;</span></div>
+    </div>
+
+    <div style="flex:1.45;display:flex;flex-direction:column;gap:16px;">
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-title">{}</div>
+          <div id="plainCard" class="card">
+            <div class="record-table">
+              <div>prototype:</div><div id="plainProto">-</div>
+              <div>`toString` lookup:</div><div id="plainLookup">-</div>
+              <div>behavior:</div><div id="plainBehavior">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Object.create(null)</div>
+          <div id="nullCard" class="card">
+            <div class="record-table">
+              <div>prototype:</div><div id="nullProto">-</div>
+              <div>`toString` lookup:</div><div id="nullLookup">-</div>
+              <div>behavior:</div><div id="nullBehavior">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Object.create(proto)</div>
+          <div id="delegatedCard" class="card">
+            <div class="record-table">
+              <div>prototype:</div><div id="delegatedProto">-</div>
+              <div>`greet` lookup:</div><div id="delegatedLookup">-</div>
+              <div>behavior:</div><div id="delegatedBehavior">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height:none;min-height:180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Дія (What):</span><span class="js-lab-log-content" id="log-what"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Причина (Why):</span><span class="js-lab-log-content" id="log-why"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Висновок:</span><span class="js-lab-log-content" id="log-insight" style="color:var(--log-accent);font-weight:bold;"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+    function resetActive() {
+      ['plainCard', 'nullCard', 'delegatedCard'].forEach((id) => {
+        document.getElementById(id).className = 'card';
+      });
+    }
+
+    function paint(state) {
+      document.getElementById('plainProto').textContent = state.plainProto;
+      document.getElementById('plainLookup').textContent = state.plainLookup;
+      document.getElementById('plainBehavior').textContent = state.plainBehavior;
+      document.getElementById('nullProto').textContent = state.nullProto;
+      document.getElementById('nullLookup').textContent = state.nullLookup;
+      document.getElementById('nullBehavior').textContent = state.nullBehavior;
+      document.getElementById('delegatedProto').textContent = state.delegatedProto;
+      document.getElementById('delegatedLookup').textContent = state.delegatedLookup;
+      document.getElementById('delegatedBehavior').textContent = state.delegatedBehavior;
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3', 'line4'],
+          narration: {
+            title: 'Three Different Prototype Setups',
+            what: 'Створено три objects із різними `[[Prototype]]` configurations.',
+            why: '`{}` успадковує `Object.prototype`, `Object.create(null)` має `null`, а `Object.create(proto)` делегує в custom prototype.',
+            insight: 'Різниця між цими трьома cases — це не cosmetic syntax, а реальна різниця в lookup behavior.'
+          },
+          action: () => {
+            resetActive();
+            paint({
+              plainProto: 'Object.prototype',
+              plainLookup: 'not checked yet',
+              plainBehavior: 'inherits built-ins',
+              nullProto: 'null',
+              nullLookup: 'not checked yet',
+              nullBehavior: 'no inherited built-ins',
+              delegatedProto: 'proto',
+              delegatedLookup: 'not checked yet',
+              delegatedBehavior: 'custom delegation'
+            });
+          }
+        },
+        {
+          codeLine: 'line6',
+          narration: {
+            title: '`{}` Looks Up Through Object.prototype',
+            what: 'Читання `plain.toString` йде в `Object.prototype`.',
+            why: 'Object literal автоматично отримує стандартний prototype chain.',
+            insight: 'Тому plain objects зручні, але не є "чистими словниками".'
+          },
+          action: () => {
+            resetActive();
+            document.getElementById('plainCard').classList.add('active');
+            paint({
+              plainProto: 'Object.prototype',
+              plainLookup: 'found via Object.prototype',
+              plainBehavior: '`toString` available',
+              nullProto: 'null',
+              nullLookup: 'not checked yet',
+              nullBehavior: 'no inherited built-ins',
+              delegatedProto: 'proto',
+              delegatedLookup: 'not checked yet',
+              delegatedBehavior: 'custom delegation'
+            });
+          }
+        },
+        {
+          codeLine: 'line7',
+          narration: {
+            title: '`Object.create(null)` Stops at null',
+            what: 'Читання `safeDict.toString` не знаходить built-in method у prototype chain.',
+            why: 'Chain одразу закінчується на `null`.',
+            insight: 'Це саме те, що робить `Object.create(null)` корисним для safe dictionaries.'
+          },
+          action: () => {
+            resetActive();
+            document.getElementById('nullCard').classList.add('active');
+            paint({
+              plainProto: 'Object.prototype',
+              plainLookup: 'found via Object.prototype',
+              plainBehavior: '`toString` available',
+              nullProto: 'null',
+              nullLookup: 'undefined',
+              nullBehavior: 'no inherited `toString`',
+              delegatedProto: 'proto',
+              delegatedLookup: 'not checked yet',
+              delegatedBehavior: 'custom delegation'
+            });
+          }
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: '`Object.create(proto)` Uses Explicit Delegation',
+            what: 'Читання `delegated.greet` йде в custom prototype `proto`.',
+            why: 'Тут prototype chain створений не стандартним object literal, а explicit delegation.',
+            insight: 'Саме це і є сила `Object.create(proto)`: ви явно керуєте поведінковим батьком.'
+          },
+          action: () => {
+            resetActive();
+            document.getElementById('delegatedCard').classList.add('active');
+            paint({
+              plainProto: 'Object.prototype',
+              plainLookup: 'found via Object.prototype',
+              plainBehavior: '`toString` available',
+              nullProto: 'null',
+              nullLookup: 'undefined',
+              nullBehavior: 'no inherited `toString`',
+              delegatedProto: 'proto',
+              delegatedLookup: 'found via custom proto',
+              delegatedBehavior: '`greet` delegated'
+            });
+          }
+        },
+        {
+          codeLine: ['line6', 'line7', 'line8'],
+          narration: {
+            title: 'Lookup Model Summary',
+            what: 'Три синтаксично прості варіанти створюють три різні lookup-моделі.',
+            why: 'Вся різниця крутиться навколо `[[Prototype]]`: стандартний built-in chain, відсутність chain або explicit custom chain.',
+            insight: 'Практичне правило: `{}` для звичайних objects, `Object.create(null)` для safe dictionaries, `Object.create(proto)` для explicit delegation.'
+          },
+          action: () => {
+            resetActive();
+            ['plainCard', 'nullCard', 'delegatedCard'].forEach((id) => {
+              document.getElementById(id).classList.add('active');
+            });
+            paint({
+              plainProto: 'Object.prototype',
+              plainLookup: 'built-in lookup works',
+              plainBehavior: 'default object semantics',
+              nullProto: 'null',
+              nullLookup: 'no built-ins',
+              nullBehavior: 'dictionary-like semantics',
+              delegatedProto: 'proto',
+              delegatedLookup: 'custom lookup path',
+              delegatedBehavior: 'explicit delegation semantics'
+            });
+          }
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
