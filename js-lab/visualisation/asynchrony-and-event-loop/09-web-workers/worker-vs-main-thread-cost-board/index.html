@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Worker vs Main-Thread Cost Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board { display:grid; grid-template-columns:380px 1fr; gap:20px; flex:1; min-height:0; }
+    .panel { background:#fff; border:2px solid var(--color-border); border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,.08); padding:16px; overflow:auto; }
+    .section-title { margin:0 0 12px; color:var(--color-stack); font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .row { display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; margin-bottom:10px; }
+    .label { font-family:Consolas, monospace; font-size:13px; color:#415a77; font-weight:700; }
+    select { width:100%; padding:8px 10px; border:1px solid #c8d3dd; border-radius:6px; background:#f8fafc; font-size:14px; }
+    .toolbar, .preset-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn, .preset-btn { padding:8px 12px; border:none; border-radius:6px; background:var(--color-stack); color:#fff; cursor:pointer; font-weight:700; }
+    .btn.alt { background:#6c7a89; }
+    .preset-btn { background:#f8fafc; color:#243b53; border:1px solid #c8d3dd; font-size:13px; padding:6px 10px; }
+    .box { border:1px solid #d9e2ec; border-radius:8px; background:#f8fafc; padding:12px; margin-bottom:14px; }
+    .box-title { margin:0 0 8px; font-size:13px; text-transform:uppercase; color:#486581; font-weight:700; letter-spacing:.04em; }
+    .pill-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-family:Consolas, monospace; font-size:13px; font-weight:700; border:1px solid transparent; }
+    .main-pill { background:#e2f3ff; color:#0b4f79; border-color:#8ec9f0; }
+    .worker-pill { background:#ece8ff; color:#4d3ca6; border-color:#b9b0f3; }
+    .clone-pill { background:#fff1d6; color:#8a5a00; border-color:#f1cf80; }
+    .transfer-pill { background:#e8f7ec; color:#166534; border-color:#9fd8af; }
+    .warn-pill { background:#ffe1e1; color:#8b1e1e; border-color:#f3b1b1; }
+    .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+    .card { border:1px solid #d9e2ec; border-radius:8px; background:#fff; min-height:140px; padding:10px; }
+    .card h4 { margin:0 0 8px; font-size:13px; color:#243b53; }
+    .meter { height:12px; background:#e5edf5; border-radius:999px; overflow:hidden; margin-bottom:8px; }
+    .fill { height:100%; background:#5b7c99; }
+    .event { font-size:12px; border-radius:6px; padding:5px 7px; margin-bottom:5px; border:1px solid #d9e2ec; background:#f8fafc; color:#243b53; font-family:Consolas, monospace; }
+    .event.main { background:#e7f4ff; }
+    .event.worker { background:#f0ecff; }
+    .event.clone { background:#fff5df; }
+    .event.transfer { background:#edf9f0; }
+    .event.warn { background:#ffe9e9; }
+    .code-preview { background:var(--code-bg); color:var(--code-text); border-radius:8px; padding:14px; font-family:Consolas, monospace; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+    .explain-list { margin:0; padding-left:20px; }
+    .muted { color:#7b8794; font-size:14px; }
+    @media (max-width: 1100px) { .board { grid-template-columns:1fr; } .grid { grid-template-columns:1fr 1fr; } }
+    @media (max-width: 640px) { .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Worker vs Main-Thread Cost Board</h2>
+    <p>Порівнюй compute cost, structured clone, transferable і final DOM commit, щоб бачити коли worker реально виграє</p>
+  </div>
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Scenario</h3>
+        <div class="row"><div class="label">Compute</div><select id="computeSelect"><option value="small">Small (~4ms)</option><option value="medium">Medium (~18ms)</option><option value="heavy">Heavy (~45ms)</option></select></div>
+        <div class="row"><div class="label">Payload</div><select id="payloadSelect"><option value="small">Small payload</option><option value="medium">Medium payload</option><option value="large">Large payload</option></select></div>
+        <div class="row"><div class="label">Transport</div><select id="transportSelect"><option value="clone">Structured clone</option><option value="transfer">Transferable ArrayBuffer</option></select></div>
+        <div class="row"><div class="label">Messages</div><select id="messagesSelect"><option value="one">Single message</option><option value="many">Many small messages</option></select></div>
+        <div class="row"><div class="label">DOM commit</div><select id="commitSelect"><option value="small">Small commit (~3ms)</option><option value="medium">Medium commit (~12ms)</option><option value="huge">Huge commit (~30ms)</option></select></div>
+        <div class="row"><div class="label">Mode</div><select id="modeSelect"><option value="main">Run on main thread</option><option value="worker">Offload to worker</option></select></div>
+        <div class="toolbar">
+          <button id="analyzeBtn" class="btn">Analyze</button>
+          <button id="resetBtn" class="btn alt">Reset</button>
+        </div>
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="bad-worker">Bad Worker Fit</button>
+          <button class="preset-btn" data-preset="good-worker">Good Worker Fit</button>
+          <button class="preset-btn" data-preset="transfer-win">Transferable Win</button>
+          <button class="preset-btn" data-preset="dom-bottleneck">DOM Bottleneck</button>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <h4 class="box-title">Mental Model</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">Worker виграє не автоматично. Потрібно дивитися на три окремі вартості: compute, transport і final main-thread commit. Якщо commit або clone занадто дорогі, виграш швидко тане.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+        <div class="box"><h4 class="box-title">Verdict</h4><div id="verdict" class="pill-list"></div></div>
+        <div class="box"><h4 class="box-title">Cost Breakdown</h4><div id="costGrid" class="grid"></div></div>
+        <div class="box"><h4 class="box-title">Why</h4><ol id="whyList" class="explain-list"></ol></div>
+        <div class="box"><h4 class="box-title">Warnings</h4><div id="warningList" class="muted"></div></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const computeMap = { small: 4, medium: 18, heavy: 45 };
+    const payloadMap = { small: 2, medium: 8, large: 22 };
+    const commitMap = { small: 3, medium: 12, huge: 30 };
+    const messageMap = { one: 1, many: 3 };
+
+    const computeSelect = document.getElementById('computeSelect');
+    const payloadSelect = document.getElementById('payloadSelect');
+    const transportSelect = document.getElementById('transportSelect');
+    const messagesSelect = document.getElementById('messagesSelect');
+    const commitSelect = document.getElementById('commitSelect');
+    const modeSelect = document.getElementById('modeSelect');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const codePreview = document.getElementById('codePreview');
+    const verdict = document.getElementById('verdict');
+    const costGrid = document.getElementById('costGrid');
+    const whyList = document.getElementById('whyList');
+    const warningList = document.getElementById('warningList');
+
+    const presets = {
+      'bad-worker': { compute: 'small', payload: 'large', transport: 'clone', messages: 'many', commit: 'small', mode: 'worker' },
+      'good-worker': { compute: 'heavy', payload: 'medium', transport: 'clone', messages: 'one', commit: 'small', mode: 'worker' },
+      'transfer-win': { compute: 'heavy', payload: 'large', transport: 'transfer', messages: 'one', commit: 'small', mode: 'worker' },
+      'dom-bottleneck': { compute: 'heavy', payload: 'medium', transport: 'transfer', messages: 'one', commit: 'huge', mode: 'worker' }
+    };
+
+    function buildCode(cfg) {
+      if (cfg.mode === 'main') {
+        return `const result = expensiveTransform(payload);\nrender(result);`;
+      }
+      const send = cfg.transport === 'transfer'
+        ? `worker.postMessage(buffer, [buffer]);`
+        : `worker.postMessage(payload);`;
+      return `const worker = new Worker("worker.js");\n${send}\nworker.onmessage = ({ data }) => {\n  render(data);\n};`;
+    }
+
+    function costCard(title, value, cls, notes) {
+      const pct = Math.min(100, Math.round((value / 50) * 100));
+      return `<div class="card"><h4>${title}</h4><div class="meter"><div class="fill" style="width:${pct}%"></div></div><div class="event ${cls}">${value}ms</div>${notes.map(n => `<div class="event ${cls}">${n}</div>`).join('')}</div>`;
+    }
+
+    function analyze() {
+      const cfg = {
+        compute: computeSelect.value,
+        payload: payloadSelect.value,
+        transport: transportSelect.value,
+        messages: messagesSelect.value,
+        commit: commitSelect.value,
+        mode: modeSelect.value
+      };
+
+      const compute = computeMap[cfg.compute];
+      const payload = payloadMap[cfg.payload];
+      const commit = commitMap[cfg.commit];
+      const chatter = messageMap[cfg.messages];
+      const transportBase = cfg.transport === 'transfer' ? Math.max(1, Math.round(payload * 0.25)) : payload;
+      const transport = transportBase * chatter;
+      const workerBoot = cfg.mode === 'worker' ? 4 : 0;
+      const mainCost = cfg.mode === 'main' ? compute + commit : transport + commit;
+      const workerCost = cfg.mode === 'worker' ? compute + workerBoot : 0;
+
+      const why = [];
+      const warnings = [];
+      const pills = [];
+
+      if (cfg.mode === 'main') {
+        pills.push({ text: 'all compute on main thread', cls: 'main-pill' });
+        why.push('Main thread виконує і compute, і final DOM commit. Це найпростіша модель, але вона напряму бʼє по input responsiveness.');
+        if (compute > 16) warnings.push('Compute перевищує frame budget, тому UI легко freeze-иться навіть до render step.');
+      } else {
+        pills.push({ text: 'compute offloaded to worker', cls: 'worker-pill' });
+        why.push('Worker забирає CPU-heavy compute з main thread, тому input і UI можуть лишатися responsive під час обчислень.');
+        if (cfg.transport === 'clone') {
+          pills.push({ text: 'structured clone cost', cls: 'clone-pill' });
+          why.push('Structured clone копіює payload, тому великий обʼєм даних або частий message passing можуть зʼїдати виграш від worker-а.');
+        } else {
+          pills.push({ text: 'transferable payload', cls: 'transfer-pill' });
+          why.push('Transferable передає ownership без повної копії, тому великі binary payloads часто набагато дешевші в transport phase.');
+        }
+      }
+
+      if (cfg.messages === 'many') {
+        warnings.push('Багато дрібних повідомлень додають coordination overhead. Навіть хороший worker можна зіпсувати chatty protocol-ом.');
+      }
+      if (commit > 16) {
+        warnings.push('Final DOM commit занадто важкий. Worker прибирає compute, але не прибирає ціну великого render commit на main thread.');
+        pills.push({ text: 'DOM commit bottleneck', cls: 'warn-pill' });
+      }
+      if (cfg.mode === 'worker' && compute <= 4 && transport >= 20) {
+        warnings.push('Тут worker майже напевно програє: compute занадто малий, а transport overhead занадто великий.');
+      }
+      if (cfg.mode === 'worker' && compute >= 18 && transport < compute) {
+        why.push('Тут worker виглядає розумно: compute достатньо важкий, а transport не домінує над усією моделлю.');
+      }
+      if (cfg.mode === 'main' && compute < 10 && commit < 10) {
+        why.push('Для маленьких задач main thread часто простіший і дешевший, ніж worker startup + messaging.');
+      }
+
+      const totalPerceived = cfg.mode === 'main' ? mainCost : Math.max(workerCost, mainCost);
+      if (cfg.mode === 'worker' && mainCost < 16) pills.push({ text: 'main thread stays mostly free', cls: 'worker-pill' });
+      if (cfg.mode === 'worker' && transport >= compute) pills.push({ text: 'transport dominates', cls: 'warn-pill' });
+      if (cfg.transport === 'transfer' && payload >= 22) pills.push({ text: 'transfer beats clone here', cls: 'transfer-pill' });
+
+      costGrid.innerHTML = [
+        costCard('Main-Thread Cost', mainCost, 'main', cfg.mode === 'main' ? ['compute + commit on main'] : ['transport + commit on main']),
+        costCard('Worker Cost', workerCost, 'worker', cfg.mode === 'worker' ? ['worker boot + compute'] : ['no worker used']),
+        costCard('Transport Cost', transport, cfg.transport === 'transfer' ? 'transfer' : 'clone', [cfg.transport === 'transfer' ? 'transferable path' : 'structured clone path', cfg.messages === 'many' ? 'chatty protocol' : 'single message']),
+        costCard('Perceived Bottleneck', totalPerceived, totalPerceived > 16 ? 'warn' : 'transfer', [commit > compute ? 'commit dominates' : 'compute dominates'])
+      ].join('');
+
+      codePreview.textContent = buildCode(cfg);
+      verdict.innerHTML = pills.map(p => `<span class="pill ${p.cls}">${p.text}</span>`).join('');
+      whyList.innerHTML = why.map(x => `<li>${x}</li>`).join('');
+      warningList.innerHTML = warnings.length ? warnings.map(x => `<span class="pill warn-pill">${x}</span>`).join(' ') : 'No extra warnings for this scenario.';
+    }
+
+    function reset() {
+      computeSelect.value = 'heavy';
+      payloadSelect.value = 'medium';
+      transportSelect.value = 'clone';
+      messagesSelect.value = 'one';
+      commitSelect.value = 'small';
+      modeSelect.value = 'worker';
+      analyze();
+    }
+
+    document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
+      const p = presets[btn.dataset.preset];
+      computeSelect.value = p.compute;
+      payloadSelect.value = p.payload;
+      transportSelect.value = p.transport;
+      messagesSelect.value = p.messages;
+      commitSelect.value = p.commit;
+      modeSelect.value = p.mode;
+      analyze();
+    }));
+
+    analyzeBtn.addEventListener('click', analyze);
+    resetBtn.addEventListener('click', reset);
+    reset();
+  </script>
+</body>
+</html>
