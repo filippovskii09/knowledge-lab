@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Microtask Starvation</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Microtask Starvation</h2>
+    <p>How a microtask chain freezes tasks and rendering</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">loop</span>() {</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="fn">queueMicrotask</span>(<span class="fn">loop</span>);</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>}</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="fn">loop</span>();</div>
+<div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="fn">setTimeout</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"timer"</span>), <span class="val-num">0</span>);</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Microtask Queue</div><div id="microtaskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Task Queue</div><div id="taskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Render Opportunity</div><div id="renderBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Loop Health</div><div id="healthBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function starvationState(microtasks, tasks, renderText, healthText, logs) {
+      renderList('microtaskBox', microtasks);
+      renderList('taskBox', tasks);
+      setText('renderBox', renderText);
+      setText('healthBox', healthText);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line4',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Loop Seeds the First Microtask',
+    what: 'Початковий виклик loop() ставить першу microtask.',
+    why: 'Поки що це виглядає як звичайний async scheduling.',
+    insight: 'Проблема почнеться не тут, а в recursive replenishment pattern.'
+  },
+  action: () => starvationState(['loop microtask'], [], '<span class="status-pill warn">render waits</span>', '<span class="status-pill warn">healthy for now</span>', [])
+},
+{
+  codeLine: 'line5',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Timer Also Becomes Ready Later',
+    what: 'setTimeout ставить callback у task queue path.',
+    why: 'Але task queue буде оброблена тільки після empty microtask queue.',
+    insight: 'Timer тут існує як canary: він покаже, що loop не yield-ить.'
+  },
+  action: () => starvationState(['loop microtask'], ['timer callback'], '<span class="status-pill warn">render waits</span>', '<span class="status-pill warn">pressure building</span>', [])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Microtask: loop'], heap: [] },
+  narration: {
+    title: 'Microtask Replenishes Itself',
+    what: 'Під час виконання loop ставить наступну loop microtask.',
+    why: 'Queue не спорожнюється, отже drain-cycle продовжується.',
+    insight: 'Це і є starvation trigger: queue never reaches empty state.'
+  },
+  action: () => starvationState(['loop microtask', 'loop microtask'], ['timer callback'], '<span class="status-pill bad">no render boundary</span>', '<span class="status-pill bad">starvation started</span>', [])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Microtask: loop'], heap: [] },
+  narration: {
+    title: 'Drain Never Finishes',
+    what: 'Runtime продовжує обробляти microtasks замість переходу до task queue.',
+    why: 'Правило drain вимагає empty queue before next task.',
+    insight: 'Тут нема одного huge sync loop, але результат для UI майже той самий — заморозка.'
+  },
+  action: () => starvationState(['loop microtask', 'loop microtask', 'loop microtask'], ['timer callback'], '<span class="status-pill bad">paint blocked</span>', '<span class="status-pill bad">main thread never yields</span>', [])
+},
+{
+  codeLine: 'line5',
+  state: { stack: [], heap: [] },
+  narration: {
+    title: 'Timer Is Ready but Starved',
+    what: 'Timer callback technically ready, але до нього ніколи не доходить черга.',
+    why: 'Starvation тут не про readiness, а про inability to leave microtask drain.',
+    insight: 'Fix — свідомо yield-ити через task boundary або інший scheduler strategy.'
+  },
+  action: () => starvationState(['loop microtask', 'loop microtask', 'loop microtask'], ['timer callback'], '<span class="status-pill bad">no render</span>', '<span class="status-pill bad">task queue starved</span>', ['timer still not printed'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
