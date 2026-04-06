@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>This Binding: UI Optimized 100vh</title>
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        /* 100vh Layout Architecture */
+        html, body {
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent body scroll */
+            background-color: var(--js-lab-bg, #f8f9fa);
+            font-family: var(--js-lab-font, 'Inter', -apple-system, sans-serif);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .js-lab-header { flex-shrink: 0; padding: 10px 20px; }
+        .js-lab-controls { flex-shrink: 0; padding: 5px 20px; margin-bottom: 5px; }
+
+        .js-lab-app {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0 20px 10px 20px;
+            gap: 15px;
+        }
+
+        .js-lab-top-row {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            overflow: hidden; /* Contain children */
+            min-height: 0; /* Crucial for flex nested scrolling */
+        }
+
+        /* Panels */
+        .js-lab-code-wrapper {
+            flex: 0.9;
+            display: flex;
+            flex-direction: column;
+            background: #282c34;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .js-lab-code {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            padding: 20px;
+        }
+
+        .js-lab-stack-column {
+            flex: 1.1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow: hidden;
+        }
+
+        /* Unified Stack/Heap Container Styles */
+        .js-lab-stack {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 15px;
+            border-radius: 8px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .js-lab-stack-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        /* Standardized Scrollbar */
+        .js-lab-stack-container::-webkit-scrollbar,
+        .js-lab-code::-webkit-scrollbar { width: 5px; }
+        .js-lab-stack-container::-webkit-scrollbar-track { background: transparent; }
+        .js-lab-stack-container::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 5px; }
+
+        /* Components */
+        .phase-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 8px;
+        }
+        .phase-creation { background: #e8daef; color: #8e44ad; }
+        .phase-execution { background: #d5f5e3; color: #27ae60; }
+
+        .exec-context {
+            border: 3px solid #7f8c8d;
+            border-radius: 8px;
+            padding: 12px;
+            background: #ecf0f1;
+            position: relative;
+            display: none;
+            opacity: 0;
+            animation: slideUp 0.3s ease-out forwards;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        .exec-context.visible { display: block; opacity: 1; }
+        .exec-context.active { border-color: #3498db; background: #fff; }
+
+        .ec-title {
+            font-weight: 850;
+            color: #2c3e50;
+            text-transform: uppercase;
+            border-bottom: 2px solid #bdc3c7;
+            padding-bottom: 6px;
+            margin-bottom: 12px;
+            font-size: 11px;
+        }
+
+        .ec-binding-pointer {
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            background: #f8f9fa;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            border-left: 3px solid #8e44ad;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .lexical-env.attached {
+            border: 2px dashed #3498db;
+            background: #ebf5fb;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        .record-table {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 4px 15px;
+            font-size: 12px;
+        }
+        .record-table > div:first-child { min-width: 80px; font-weight: bold; color: #c678dd; }
+        .this-record-row { background: rgba(241, 196, 15, 0.2); border-radius: 3px; border-left: 3px solid #e67e22; padding-left: 5px; }
+
+        /* Analysis Footer */
+        .js-lab-analysis {
+            flex-shrink: 0;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .scanner-beam {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 24px;
+            background: rgba(39, 174, 96, 0.1);
+            border-left: 4px solid #27ae60;
+            transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>This Binding: Прив'язка контексту (V8 Spec)</h2>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- CODE -->
+        <div class="js-lab-code-wrapper">
+            <div class="js-lab-code">
+                <div id="scanner" class="scanner-beam"></div>
+                <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">greet</span>() {</div>
+                <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="kw">this</span>.<span class="var">name</span>);</div>
+                <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>}</div>
+                <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span></div>
+                <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> { <span class="var">name</span>: <span class="str">'Artur'</span>, <span class="fn">greet</span> };</div>
+                <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span><span class="kw">const</span> <span class="var">other</span> <span class="op">=</span> { <span class="var">name</span>: <span class="str">'Guest'</span> };</div>
+                <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span></div>
+                <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span><span class="fn">greet</span>(); <span class="com">// (1) Default Binding</span></div>
+                <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span><span class="var">user</span>.<span class="fn">greet</span>(); <span class="com">// (2) Implicit Binding</span></div>
+                <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span><span class="fn">greet</span>.<span class="fn">call</span>(<span class="var">other</span>); <span class="com">// (3) Explicit Binding</span></div>
+                <div class="js-lab-line" id="l11"><span class="js-lab-line-num">11</span></div>
+                <div class="js-lab-line" id="l12"><span class="js-lab-line-num">12</span><span class="kw">const</span> <span class="fn">arrow</span> <span class="op">=</span> () <span class="op">=></span> <span class="fn">console</span>.<span class="fn">log</span>(<span class="kw">this</span>.<span class="var">name</span>);</div>
+                <div class="js-lab-line" id="l13"><span class="js-lab-line-num">13</span><span class="fn">arrow</span>(); <span class="com">// (4) Lexical Inheritance</span></div>
+            </div>
+        </div>
+
+        <!-- STACK & HEAP -->
+        <div class="js-lab-stack-column">
+            <!-- Stack -->
+            <div class="js-lab-stack" style="flex: 1.2; border-color: #3498db;">
+                <div style="margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 8px; flex-shrink: 0;">
+                    <span id="badgeCreate" class="phase-badge phase-creation" style="opacity:1;">Creation Phase</span>
+                    <span id="badgeExec" class="phase-badge phase-execution" style="opacity:0.3;">Execution Phase</span>
+                </div>
+                <div class="js-lab-stack-title" style="font-size: 12px; margin-bottom: 8px; flex-shrink: 0;">Execution Context Stack</div>
+                <div id="stack-container" class="js-lab-stack-container"></div>
+            </div>
+            
+            <!-- Heap -->
+            <div class="js-lab-stack" id="heap-container" style="flex: 1; border-color: #e67e22;">
+                <div class="js-lab-stack-title" style="color: #d35400; margin-bottom: 10px; font-size: 12px; flex-shrink: 0;">Memory Heap</div>
+                <div id="heap-content" class="js-lab-stack-container">
+                    <div class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xGlobal <span style="color:#7f8c8d;font-size:10px;">(GlobalObject)</span></div>
+                        <div class="record-table">
+                            <div>window:</div><div class="val-reference">&lt;ref: self&gt;</div>
+                            <div>name:</div><div class="val-primitive">undefined</div>
+                            <div>greet:</div><div class="val-reference">&lt;f&gt;</div>
+                        </div>
+                    </div>
+                    <div class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0x111 <span style="color:#7f8c8d;font-size:10px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>name:</div><div class="val-primitive">"Artur"</div>
+                            <div>greet:</div><div class="val-reference">&lt;f&gt;</div>
+                        </div>
+                    </div>
+                    <div class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0x222 <span style="color:#7f8c8d;font-size:10px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>name:</div><div class="val-primitive">"Guest"</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANALYSIS -->
+    <div class="js-lab-analysis">
+        <h3 id="analysis-title" style="margin: 0 0 10px 0; font-size: 14px; color: #3498db;">Аналіз Виконання</h3>
+        <div id="analysis-body" class="log-wrapper fade-in" style="font-size: 13px;">
+            <div class="js-lab-log-item"><span class="js-lab-log-label" style="color: #999;">Що (What):</span> <span id="log-what"></span></div>
+            <div class="js-lab-log-item"><span class="js-lab-log-label" style="color: #999;">Чому (Why):</span> <span id="log-why"></span></div>
+            <div class="js-lab-log-item"><span class="js-lab-log-label" style="color: #999;">Висновок:</span> <span id="log-insight" style="color: #27ae60; font-weight: bold;"></span></div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setPhase(phase) {
+        document.getElementById('badgeCreate').style.opacity = (phase === 'create' ? 1 : 0.3);
+        document.getElementById('badgeExec').style.opacity = (phase === 'exec' ? 1 : 0.3);
+    }
+    function scan(line) {
+        const sc = document.getElementById('scanner');
+        if (line === null) { sc.style.opacity = 0; return; }
+        sc.style.opacity = 1;
+        const lineEl = document.getElementById('l' + line);
+        if (lineEl) sc.style.top = (lineEl.offsetTop - 20) + 'px';
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                narration: {
+                    title: "1. Global Execution Context Initialization",
+                    what: "V8 створює GEC та прив'язує до нього Global Lexical Environment.",
+                    why: "Для GEC значення [this] завжди є об'єктом середовища (@0xGlobal).",
+                    insight: "Розуміння: [this] тепер повноцінна частина Environment Record."
+                },
+                action: () => {
+                    setPhase('create'); scan(null);
+                    renderStack([{ name: 'Global', thisVal: '@0xGlobal', outer: 'null' }]);
+                }
+            },
+            {
+                codeLine: 'l8',
+                narration: {
+                    title: "2. Default Binding",
+                    what: "Виконується greet(). Глобальний об'єкт стає значенням [this].",
+                    why: "Виклик без власника (obj) повертає Global Object у нестрогому режимі.",
+                    insight: "V8 автоматично заповнює слот [this] при вході у функцію."
+                },
+                action: () => {
+                    setPhase('exec'); scan(8);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'greet()', thisVal: '@0xGlobal', outer: 'Global Env' }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l2',
+                narration: {
+                    title: "3. Execution (Default)",
+                    what: "this.name читається з Global Object (@0xGlobal).",
+                    why: "[this] вказує на Global, де name = undefined.",
+                    insight: "Всі змінні та контекст тепер в одному синьому блоці середовища."
+                },
+                action: () => {
+                    setPhase('exec'); scan(2);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'greet()', thisVal: '@0xGlobal', outer: 'Global Env', active: true }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l9',
+                narration: {
+                    title: "4. Implicit Binding",
+                    what: "Виклик user.greet(). Об'єкт 'user' (@0x111) стає [this].",
+                    why: "V8 копіює посилання на об'єкт з-ліва від крапки у слот [this].",
+                    insight: "Це динамічна природа [this]: він залежить лише від способу виклику."
+                },
+                action: () => {
+                    setPhase('exec'); scan(9);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'greet()', thisVal: '@0x111', outer: 'Global Env' }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l10',
+                narration: {
+                    title: "5. Explicit Binding",
+                    what: "Виклик greet.call(other). Ми примусово вказуємо @0x222 як [this].",
+                    why: "Методи call/apply мають вищий пріоритет над іншими типами прив'язки.",
+                    insight: "Ви можете керувати контекстом вручну через API мови."
+                },
+                action: () => {
+                    setPhase('exec'); scan(10);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'greet()', thisVal: '@0x222', outer: 'Global Env' }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l13',
+                narration: {
+                    title: "6. Lexical This (Arrow)",
+                    what: "Стрілка arrow() не має власного [this]. Вона успадковує його.",
+                    why: "Пошук виконується через Lexical Scope до батьківського контексту.",
+                    insight: "Стрілки ігнорують call/apply/bind щодо власного контексту."
+                },
+                action: () => {
+                    setPhase('exec'); scan(13);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'arrow()', thisVal: '↳ Outer (@0xGlobal)', outer: 'Global Env', type: 'Arrow' }
+                    ]);
+                }
+            }
+        ]
+    };
+
+    function renderStack(frames) {
+        const container = document.getElementById('stack-container');
+        if (!container) return;
+        container.innerHTML = '';
+        [...frames].reverse().forEach(frame => {
+            const div = document.createElement('div');
+            div.className = `exec-context visible ${frame.active ? 'active' : ''}`;
+            div.innerHTML = `
+                <div class="ec-title">${frame.name} Execution Context</div>
+                <div class="ec-binding-pointer">
+                    <span>LexicalEnvironment:</span>
+                    <span style="color:#8e44ad; font-weight:bold;">↳ ${frame.name} Env</span>
+                </div>
+                <div class="lexical-env attached" ${frame.active ? 'style="border-color:#27ae60; background:#e9f7ef;"' : ''}>
+                    <div class="record-zone">
+                        <div style="font-size:10px; font-weight:800; color:#34495e; margin-bottom:5px;">ENVIRONMENT RECORD</div>
+                        <div class="record-table">
+                            <div>[this]:</div>
+                            <div class="${frame.type === 'Arrow' ? '' : 'this-record-row'}">${frame.thisVal}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px; border-top: 1px dashed #bdc3c7; padding-top:5px; font-size:10px;">
+                        <strong>[[OuterEnv]]:</strong> <span style="color:#e67e22">${frame.outer}</span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const engine = new JSLabEngine(config);
+        engine.init();
+    });
+</script>
+
+</body>
+</html>
