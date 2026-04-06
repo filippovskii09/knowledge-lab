@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>WeakMap vs Map and GC</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .op { color: #56b6c2; }
+    .num { color: #d19a66; }
+    .str { color: #98c379; }
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .var { color: #e06c75; }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .memory-panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 240px;
+    }
+
+    .memory-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .mini-env,
+    .heap-card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      display: none;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.3s ease;
+    }
+
+    .mini-env.visible,
+    .heap-card.visible {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .mini-env.warning {
+      border-color: #f39c12;
+      background: #fef5e7;
+    }
+
+    .mini-env.success {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .heap-card {
+      border-color: #9b59b6;
+      background: #faf5fb;
+      position: relative;
+    }
+
+    .card-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #8e44ad;
+      font-family: monospace;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 14px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .kept-alive {
+      border-color: #e67e22 !important;
+      background: #fff4e6 !important;
+    }
+
+    .kept-alive::after {
+      content: 'Strongly Retained';
+      position: absolute;
+      top: -10px;
+      right: 10px;
+      background: #e67e22;
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .collectable {
+      border-color: #27ae60 !important;
+      background: #eafaf1 !important;
+    }
+
+    .collectable::after {
+      content: 'Collectable';
+      position: absolute;
+      top: -10px;
+      right: 10px;
+      background: #27ae60;
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .swept {
+      opacity: 0.2 !important;
+      transform: scale(0.96);
+    }
+
+    .badge {
+      display: inline-block;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #f4ecf7;
+      color: #8e44ad;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>WeakMap, Map and Garbage Collection</h2>
+  <p>Покроково: коли metadata не блокує GC, а коли звичайний Map утримує object key живим.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.15;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">strongMeta</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">Map</span>()<span class="op">;</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">weakMeta</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">WeakMap</span>()<span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="kw">let</span> <span class="var">cardA</span> <span class="op">=</span> { id: <span class="num">1</span> }<span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="kw">let</span> <span class="var">cardB</span> <span class="op">=</span> { id: <span class="num">2</span> }<span class="op">;</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="var">weakMeta</span>.<span class="fn">set</span>(<span class="var">cardA</span>, { state: <span class="str">"hovered"</span> })<span class="op">;</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="var">strongMeta</span>.<span class="fn">set</span>(<span class="var">cardB</span>, { state: <span class="str">"selected"</span> })<span class="op">;</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="var">cardA</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span><span class="var">cardB</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line12"><span class="js-lab-line-num">12</span></div>
+      <div class="js-lab-line" id="line13"><span class="js-lab-line-num">13</span><span class="com">// GC may collect cardA, but not cardB</span></div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="panel-grid">
+        <div class="memory-panel">
+          <div class="memory-title">Roots and Collections</div>
+          <div id="globalEnv" class="mini-env visible">
+            <div class="card-title">Global Environment</div>
+            <div class="record-table">
+              <div>cardA:</div><div id="valCardA" class="val-uninit">&lt;uninitialized&gt;</div>
+              <div>cardB:</div><div id="valCardB" class="val-uninit">&lt;uninitialized&gt;</div>
+            </div>
+          </div>
+          <div id="weakMapEnv" class="mini-env">
+            <div class="card-title">WeakMap Metadata</div>
+            <div class="record-table">
+              <div>key:</div><div><span class="badge">cardA</span></div>
+              <div>value:</div><div>{ state: "hovered" }</div>
+            </div>
+          </div>
+          <div id="mapEnv" class="mini-env warning">
+            <div class="card-title">Map Metadata</div>
+            <div class="record-table">
+              <div>key:</div><div><span class="badge">cardB</span></div>
+              <div>value:</div><div>{ state: "selected" }</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="memory-panel">
+          <div class="memory-title">Heap Objects</div>
+          <div id="heapA" class="heap-card">
+            <div class="card-title">@0xA1 (cardA)</div>
+            <div class="record-table">
+              <div>id:</div><div class="val-primitive">1</div>
+              <div>metadata:</div><div class="val-reference">WeakMap only</div>
+            </div>
+          </div>
+          <div id="heapB" class="heap-card">
+            <div class="card-title">@0xB2 (cardB)</div>
+            <div class="record-table">
+              <div>id:</div><div class="val-primitive">2</div>
+              <div>metadata:</div><div class="val-reference">Map key</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function resetHeapMarks() {
+      document.getElementById('heapA').className = 'heap-card visible';
+      document.getElementById('heapB').className = 'heap-card visible';
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2'],
+          narration: {
+            title: 'Створення Колекцій',
+            what: 'У глобальному середовищі створено дві metadata-колекції: `Map` і `WeakMap`.',
+            why: 'Обидві структури можуть асоціювати дані з object keys, але лише `Map` утримує ключ сильно.',
+            insight: 'Головне питання не в API, а в тому, чи колекція продовжує бути частиною retained path до ключового об’єкта.'
+          },
+          action: () => {
+            document.getElementById('valCardA').innerText = '<uninitialized>';
+            document.getElementById('valCardA').className = 'val-uninit';
+            document.getElementById('valCardB').innerText = '<uninitialized>';
+            document.getElementById('valCardB').className = 'val-uninit';
+            document.getElementById('weakMapEnv').className = 'mini-env';
+            document.getElementById('mapEnv').className = 'mini-env warning';
+            document.getElementById('heapA').className = 'heap-card';
+            document.getElementById('heapB').className = 'heap-card';
+          }
+        },
+        {
+          codeLine: ['line4', 'line5'],
+          narration: {
+            title: 'Створення Object Keys',
+            what: 'Створено два об’єкти: `cardA` і `cardB`. Обидва reachable через Global Environment.',
+            why: 'Поки локальні або глобальні bindings існують, GC бачить шлях від root до об’єкта.',
+            insight: 'WeakMap не має магічної сили "видаляти" об’єкти. Поки існує сильне посилання з коду, об’єкт звичайно живий.'
+          },
+          action: () => {
+            document.getElementById('valCardA').innerHTML = '&lt;ref: <span class="badge">0xA1</span>&gt;';
+            document.getElementById('valCardA').className = 'val-reference';
+            document.getElementById('valCardB').innerHTML = '&lt;ref: <span class="badge">0xB2</span>&gt;';
+            document.getElementById('valCardB').className = 'val-reference';
+            document.getElementById('heapA').className = 'heap-card visible';
+            document.getElementById('heapB').className = 'heap-card visible';
+          }
+        },
+        {
+          codeLine: ['line7', 'line8'],
+          narration: {
+            title: 'Реєстрація Metadata',
+            what: '`cardA` покладено в `WeakMap`, а `cardB` у звичайний `Map`.',
+            why: 'Тепер обидва об’єкти мають metadata, але характер утримання ключа різний: weak проти strong.',
+            insight: 'Саме відсутність повної ітерації в `WeakMap` є побічним ефектом того, що рушій не гарантує стабільний список ключів після GC.'
+          },
+          action: () => {
+            document.getElementById('weakMapEnv').className = 'mini-env success visible';
+            document.getElementById('mapEnv').className = 'mini-env warning visible';
+            resetHeapMarks();
+          }
+        },
+        {
+          codeLine: ['line10', 'line11'],
+          narration: {
+            title: 'Втрата Сильних Зовнішніх Посилань',
+            what: 'Bindings `cardA` і `cardB` у Global Environment обнулені.',
+            why: 'Після цього тільки колекції можуть залишатися шляхом від root до об’єктів.',
+            insight: 'Саме в цей момент проявляється різниця: чи є колекція частиною strong retained path, чи ні.'
+          },
+          action: () => {
+            document.getElementById('valCardA').innerText = 'null';
+            document.getElementById('valCardA').className = 'val-primitive';
+            document.getElementById('valCardB').innerText = 'null';
+            document.getElementById('valCardB').className = 'val-primitive';
+            resetHeapMarks();
+          }
+        },
+        {
+          codeLine: 'line13',
+          narration: {
+            title: 'Reachability Analysis',
+            what: '`cardA` тепер reachable лише через `WeakMap`, а `cardB` reachable через звичайний `Map`.',
+            why: 'Weak reference не утримує key живим сама по собі. Strong reference з `Map` продовжує бути валідним retained path.',
+            insight: 'Правильна ментальна модель: `WeakMap` не "очищає" об’єкт. Вона просто не заважає GC зробити це.'
+          },
+          action: () => {
+            document.getElementById('heapA').className = 'heap-card visible collectable';
+            document.getElementById('heapB').className = 'heap-card visible kept-alive';
+          }
+        },
+        {
+          codeLine: 'line13',
+          narration: {
+            title: 'Sweep Result',
+            what: 'GC може прибрати `cardA`, але `cardB` лишається в Heap, поки його утримує `Map`.',
+            why: 'Для `cardA` більше немає strong path від root. Для `cardB` таким шляхом служить `strongMeta -> key`.',
+            insight: 'Використовуйте `WeakMap` для metadata, яка має жити не довше за об’єкт-ключ. Для видимого й керованого списку ключів використовуйте `Map` свідомо.'
+          },
+          action: () => {
+            document.getElementById('heapA').className = 'heap-card visible collectable swept';
+            document.getElementById('heapB').className = 'heap-card visible kept-alive';
+          }
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
