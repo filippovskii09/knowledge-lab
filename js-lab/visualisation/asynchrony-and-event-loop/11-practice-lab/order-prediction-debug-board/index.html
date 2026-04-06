@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Order Prediction Debug Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      flex: 1;
+      min-height: 0;
+    }
+    .controls-panel,
+    .result-panel {
+      background: #fff;
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      padding: 16px;
+      overflow: auto;
+    }
+    .section-title {
+      margin: 0 0 12px 0;
+      color: var(--color-stack);
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .slot-row {
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .slot-label {
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      color: #415a77;
+      font-weight: 700;
+    }
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #c8d3dd;
+      border-radius: 6px;
+      background: #f8fafc;
+      font-size: 14px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .tool-btn {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: var(--color-stack);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .tool-btn.alt {
+      background: #6c7a89;
+    }
+    .tool-btn:hover,
+    .preset-btn:hover {
+      opacity: 0.92;
+    }
+    .preset-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .preset-btn {
+      padding: 6px 10px;
+      border: 1px solid #c8d3dd;
+      border-radius: 999px;
+      background: #f8fafc;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .hint-box,
+    .explain-box,
+    .queue-box,
+    .output-box {
+      border: 1px solid #d9e2ec;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .queue-title,
+    .output-title {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #486581;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .sync-pill {
+      background: #e8eef5;
+      color: #334e68;
+      border-color: #c9d6e2;
+    }
+    .micro-pill {
+      background: #e2f3ff;
+      color: #0b4f79;
+      border-color: #8ec9f0;
+    }
+    .task-pill {
+      background: #fff1d6;
+      color: #8a5a00;
+      border-color: #f1cf80;
+    }
+    .render-pill {
+      background: #e8f7ec;
+      color: #166534;
+      border-color: #9fd8af;
+    }
+    .code-preview {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .explain-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .legend .pill {
+      font-weight: 600;
+    }
+    @media (max-width: 960px) {
+      .board {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Order Prediction Debug Board</h2>
+    <p>Збирай async-сценарій руками і дивись реальний порядок: sync -&gt; microtasks -&gt; render chance -&gt; next task</p>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="controls-panel">
+        <h3 class="section-title">Scenario Builder</h3>
+        <div id="slotContainer"></div>
+
+        <div class="toolbar">
+          <button id="analyzeBtn" class="tool-btn">Analyze</button>
+          <button id="clearBtn" class="tool-btn alt">Clear</button>
+        </div>
+
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="promise-vs-timeout">Promise vs Timeout</button>
+          <button class="preset-btn" data-preset="queue-vs-promise">queueMicrotask vs Promise</button>
+          <button class="preset-btn" data-preset="await-boundary">await Boundary</button>
+          <button class="preset-btn" data-preset="render-trap">Render Trap</button>
+        </div>
+
+        <div class="hint-box" style="margin-top:16px;">
+          <h4 class="queue-title">Model</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">
+            Цей board навмисно моделює базовий browser order: спочатку весь sync-код,
+            потім повний drain microtasks, потім render chance, а вже після цього —
+            наступний task із `setTimeout`.
+          </p>
+          <div class="legend">
+            <span class="pill sync-pill">sync</span>
+            <span class="pill micro-pill">microtask</span>
+            <span class="pill task-pill">task</span>
+            <span class="pill render-pill">render chance</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="result-panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+
+        <div class="queue-box">
+          <h4 class="queue-title">Sync Output</h4>
+          <div id="syncList" class="pill-list"></div>
+        </div>
+
+        <div class="queue-box">
+          <h4 class="queue-title">Microtask Queue</h4>
+          <div id="microtaskList" class="pill-list"></div>
+        </div>
+
+        <div class="queue-box">
+          <h4 class="queue-title">Task Queue</h4>
+          <div id="taskList" class="pill-list"></div>
+        </div>
+
+        <div class="output-box">
+          <h4 class="output-title">Final Order</h4>
+          <div id="finalOrder" class="pill-list"></div>
+        </div>
+
+        <div class="explain-box">
+          <h4 class="queue-title">Why</h4>
+          <ol id="explainList" class="explain-list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const OPERATIONS = [
+      { value: 'empty', label: '— empty —', type: 'none', code: '' },
+      { value: 'sync-a', label: 'console.log("A")', type: 'sync', output: 'A', code: 'console.log("A");' },
+      { value: 'sync-b', label: 'console.log("B")', type: 'sync', output: 'B', code: 'console.log("B");' },
+      { value: 'sync-c', label: 'console.log("C")', type: 'sync', output: 'C', code: 'console.log("C");' },
+      { value: 'timeout-t', label: 'setTimeout(() => console.log("T"), 0)', type: 'task', output: 'T', code: 'setTimeout(() => console.log("T"), 0);' },
+      { value: 'timeout-x', label: 'setTimeout(() => console.log("X"), 0)', type: 'task', output: 'X', code: 'setTimeout(() => console.log("X"), 0);' },
+      { value: 'promise-p', label: 'Promise.resolve().then(() => console.log("P"))', type: 'microtask', output: 'P', code: 'Promise.resolve().then(() => console.log("P"));' },
+      { value: 'promise-y', label: 'Promise.resolve().then(() => console.log("Y"))', type: 'microtask', output: 'Y', code: 'Promise.resolve().then(() => console.log("Y"));' },
+      { value: 'queue-q', label: 'queueMicrotask(() => console.log("Q"))', type: 'microtask', output: 'Q', code: 'queueMicrotask(() => console.log("Q"));' },
+      { value: 'queue-m', label: 'queueMicrotask(() => console.log("M"))', type: 'microtask', output: 'M', code: 'queueMicrotask(() => console.log("M"));' },
+      { value: 'await-w', label: 'async boundary -> continuation logs "W"', type: 'microtask', output: 'W', code: 'async function run() { await Promise.resolve(); console.log("W"); }\nrun();' },
+      { value: 'render', label: 'DOM mutation (render-sensitive step)', type: 'render', output: 'DOM updated', code: 'spinner.style.display = "block";' }
+    ];
+
+    const SLOTS = 6;
+    const slotContainer = document.getElementById('slotContainer');
+    const codePreview = document.getElementById('codePreview');
+    const syncList = document.getElementById('syncList');
+    const microtaskList = document.getElementById('microtaskList');
+    const taskList = document.getElementById('taskList');
+    const finalOrder = document.getElementById('finalOrder');
+    const explainList = document.getElementById('explainList');
+
+    function createSlots() {
+      slotContainer.innerHTML = '';
+      for (let i = 0; i < SLOTS; i++) {
+        const row = document.createElement('div');
+        row.className = 'slot-row';
+        row.innerHTML = `
+          <div class="slot-label">#${i + 1}</div>
+          <select data-slot="${i}">
+            ${OPERATIONS.map((op) => `<option value="${op.value}">${op.label}</option>`).join('')}
+          </select>
+        `;
+        slotContainer.appendChild(row);
+      }
+    }
+
+    function getSelectedOps() {
+      return [...slotContainer.querySelectorAll('select')]
+        .map((select) => OPERATIONS.find((op) => op.value === select.value))
+        .filter(Boolean);
+    }
+
+    function renderPills(container, items, className) {
+      container.innerHTML = items.length
+        ? items.map((item) => `<span class="pill ${className}">${item}</span>`).join('')
+        : '<span style="color:#7b8794; font-size:14px;">empty</span>';
+    }
+
+    function analyze() {
+      const ops = getSelectedOps();
+      const syncOutputs = [];
+      const microtasks = [];
+      const tasks = [];
+      let sawRenderSensitiveMutation = false;
+
+      const codeLines = [];
+      const explanations = [];
+
+      for (const op of ops) {
+        if (!op || op.type === 'none') continue;
+        codeLines.push(op.code);
+        if (op.type === 'sync') {
+          syncOutputs.push(op.output);
+        } else if (op.type === 'microtask') {
+          microtasks.push(op.output);
+        } else if (op.type === 'task') {
+          tasks.push(op.output);
+        } else if (op.type === 'render') {
+          sawRenderSensitiveMutation = true;
+        }
+      }
+
+      const final = [];
+      syncOutputs.forEach((item) => final.push({ label: item, kind: 'sync-pill' }));
+      microtasks.forEach((item) => final.push({ label: item, kind: 'micro-pill' }));
+      if (sawRenderSensitiveMutation) {
+        final.push({ label: 'render chance', kind: 'render-pill' });
+      }
+      tasks.forEach((item) => final.push({ label: item, kind: 'task-pill' }));
+
+      explanations.push('Спочатку виконується весь sync-код у порядку появи у поточному task.');
+
+      if (microtasks.length) {
+        explanations.push('Після завершення sync task runtime повністю дренує microtask queue у FIFO-порядку.');
+      } else {
+        explanations.push('Microtask queue у цьому сценарії порожня, тому після sync-коду немає high-priority continuation phase.');
+      }
+
+      if (sawRenderSensitiveMutation) {
+        explanations.push('DOM mutation сама по собі не означає миттєвий paint; browser отримає лише шанс на render після sync-коду і після microtasks.');
+      }
+
+      if (tasks.length) {
+        explanations.push('Callbacks із setTimeout живуть у task queue і доходять до виконання лише після microtasks і після потенційного render chance.');
+      }
+
+      if (!syncOutputs.length && !microtasks.length && !tasks.length && !sawRenderSensitiveMutation) {
+        explanations.push('Сценарій порожній, тому порядку виконання фактично немає.');
+      }
+
+      codePreview.textContent = codeLines.length ? codeLines.join('\n') : '// choose operations on the left';
+      renderPills(syncList, syncOutputs, 'sync-pill');
+      renderPills(microtaskList, microtasks, 'micro-pill');
+      renderPills(taskList, tasks, 'task-pill');
+      finalOrder.innerHTML = final.length
+        ? final.map((item) => `<span class="pill ${item.kind}">${item.label}</span>`).join('')
+        : '<span style="color:#7b8794; font-size:14px;">empty</span>';
+      explainList.innerHTML = explanations.map((item) => `<li>${item}</li>`).join('');
+    }
+
+    function applyPreset(name) {
+      const selects = [...slotContainer.querySelectorAll('select')];
+      const presets = {
+        'promise-vs-timeout': ['sync-a', 'timeout-t', 'promise-p', 'sync-b', 'empty', 'empty'],
+        'queue-vs-promise': ['sync-a', 'queue-q', 'promise-p', 'sync-b', 'empty', 'empty'],
+        'await-boundary': ['await-w', 'sync-a', 'timeout-t', 'empty', 'empty', 'empty'],
+        'render-trap': ['render', 'promise-p', 'timeout-t', 'sync-a', 'empty', 'empty']
+      };
+      const values = presets[name] || presets['promise-vs-timeout'];
+      selects.forEach((select, index) => {
+        select.value = values[index] || 'empty';
+      });
+      analyze();
+    }
+
+    document.getElementById('analyzeBtn').addEventListener('click', analyze);
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      [...slotContainer.querySelectorAll('select')].forEach((select) => {
+        select.value = 'empty';
+      });
+      analyze();
+    });
+    document.querySelectorAll('.preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    createSlots();
+    applyPreset('promise-vs-timeout');
+  </script>
+</body>
+</html>
