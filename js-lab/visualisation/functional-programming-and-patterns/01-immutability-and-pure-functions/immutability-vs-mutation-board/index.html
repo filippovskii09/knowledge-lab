@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Immutability vs Mutation Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 12px; box-sizing: border-box; }
+    .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; }
+    .state-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+    .state-card { border: 1px solid #d7dfe8; border-radius: 6px; padding: 8px; background: #fff; }
+    .mut { color: #a61b1b; font-weight: 700; }
+    .safe { color: #146c43; font-weight: 700; }
+    .json { font-family: Consolas, monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header"><h2>Immutability vs Mutation Board</h2><p>Порівняй mutating update і immutable update покроково</p></div>
+  <div class="js-lab-controls"><button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button><div id="stepInfo" class="js-lab-step-info">Крок 1 / 1</div><button id="btnNext" class="js-lab-btn">Далі ►</button></div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> state <span class="op">=</span> { user: { name: <span class="str">'Ann'</span> } };</div>
+        <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>state.user.name <span class="op">=</span> <span class="str">'Ira'</span>;</div>
+        <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">const</span> next <span class="op">=</span> { <span class="op">...</span>state, user: { <span class="op">...</span>state.user, name: <span class="str">'Ira'</span> } };</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">State View</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+          <div class="panel-box"><div class="panel-title">Current Snapshot</div><div id="snapshotBox" class="state-grid"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis" id="analysis-log"><h3 id="analysis-title">Title</h3><div id="analysis-body" class="log-wrapper fade-in"><div class="js-lab-log-item"><span class="js-lab-log-label">What:</span><span id="log-what"></span></div><div class="js-lab-log-item"><span class="js-lab-log-label">Why:</span><span id="log-why"></span></div><div class="js-lab-log-item"><span class="js-lab-log-label">Insight:</span><span id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span></div></div></div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+    const view = (leftTitle, leftBody, rightTitle, rightBody) => {
+      document.getElementById('snapshotBox').innerHTML = `
+        <div class="state-card"><div class="panel-title">${leftTitle}</div><div class="json">${leftBody}</div></div>
+        <div class="state-card"><div class="panel-title">${rightTitle}</div><div class="json">${rightBody}</div></div>`;
+    };
+    const config = { steps: [
+      { codeLine: 'line1', narration: { title: 'Initial Shared State', what: 'Є один state object з nested user.', why: 'Поки що ні mutation, ні копії ще не відбулися.', insight: 'Проблема з’являється лише тоді, коли той самий reference починають змінювати.' }, action: () => view('state', '{
+  user: { name: "Ann" }
+}', 'otherRef', '{
+  user: { name: "Ann" }
+}') },
+      { codeLine: 'line2', narration: { title: 'Mutating Update', what: 'Міняється nested field на тому ж object graph.', why: 'Усі інші references бачать той самий mutated nested object.', insight: 'Shared reference робить mutation невидимим джерелом багів.' }, action: () => view('state', '<span class="mut">{
+  user: { name: "Ira" }
+}</span>', 'otherRef', '<span class="mut">{
+  user: { name: "Ira" }
+}</span>') },
+      { codeLine: 'line3', narration: { title: 'Immutable Update', what: 'Створюється новий top-level object і новий nested user.', why: 'Старий state лишається недоторканим, а next отримує нову shape-compatible структуру.', insight: 'Immutable update локалізує зміну й полегшує debugging, memoization і testability.' }, action: () => view('old state', '<span class="safe">{
+  user: { name: "Ann" }
+}</span>', 'next state', '<span class="safe">{
+  user: { name: "Ira" }
+}</span>') }
+    ]};
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
