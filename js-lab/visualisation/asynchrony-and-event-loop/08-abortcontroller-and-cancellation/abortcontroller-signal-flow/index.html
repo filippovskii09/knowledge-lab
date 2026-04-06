@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>AbortController and Cancellation</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>AbortController and Cancellation</h2>
+    <p>Signal-driven cancellation path</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">controller</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">AbortController</span>();</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">signal</span> <span class="op">=</span> <span class="var">controller</span>.<span class="var">signal</span>;</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="fn">fetch</span>(<span class="str">"/api/data"</span>, { <span class="var">signal</span> });</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="var">controller</span>.<span class="fn">abort</span>();</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Controller</div><div id="controllerBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Signal</div><div id="signalBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Fetch State</div><div id="fetchBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">UI Decision</div><div id="uiBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function abortState(controllerState, signalState, fetchState, uiState, logs) {
+      setText('controllerBox', controllerState);
+      setText('signalBox', signalState);
+      setText('fetchBox', fetchState);
+      setText('uiBox', uiState);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line1',
+  state: { stack: ['Global'], heap: ['AbortController'] },
+  narration: {
+    title: 'Controller Created',
+    what: 'AbortController стає джерелом керування життєвим циклом операції.',
+    why: 'Потрібен окремий control object, який зможе broadcast-ити abort state.',
+    insight: 'Cancellation тут будується не через магію promise, а через explicit signal propagation.'
+  },
+  action: () => abortState('<span class="status-pill ok">controller alive</span>', '<span class="status-pill neutral">signal not read yet</span>', '<span class="status-pill neutral">no fetch yet</span>', '<span class="status-pill neutral">waiting</span>', [])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Global'], heap: ['AbortSignal'] },
+  narration: {
+    title: 'Signal Captured',
+    what: 'Consumer-facing AbortSignal відділяється від control object.',
+    why: 'Consumers мають читати signal state, але не керувати controller напряму.',
+    insight: 'Це lifecycle channel, а не просто прапорець “скасовано/не скасовано”.'
+  },
+  action: () => abortState('<span class="status-pill ok">controller alive</span>', '<span class="status-pill ok">signal.aborted = false</span>', '<span class="status-pill neutral">no fetch yet</span>', '<span class="status-pill neutral">waiting</span>', [])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['Global'], heap: ['Fetch request'] },
+  narration: {
+    title: 'Fetch Starts with Signal',
+    what: 'fetch підписується на signal і починає request.',
+    why: 'Abort-aware API може завершити operation раніше, якщо signal зміниться.',
+    insight: 'Правильний signal binding зменшує stale work, а не лише stale rendering.'
+  },
+  action: () => abortState('<span class="status-pill ok">controller alive</span>', '<span class="status-pill ok">aborted = false</span>', '<span class="status-pill warn">fetch pending</span>', '<span class="status-pill neutral">waiting for result</span>', ['request started'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['Global'], heap: ['Fetch request'] },
+  narration: {
+    title: 'Abort Broadcast',
+    what: 'controller.abort() переводить signal у aborted state.',
+    why: 'Усі consumers цього signal мають побачити change і завершити свої paths.',
+    insight: 'Одна lifecycle boundary може зупинити кілька повʼязаних async operations.'
+  },
+  action: () => abortState('<span class="status-pill bad">controller aborted</span>', '<span class="status-pill bad">aborted = true</span>', '<span class="status-pill warn">fetch aborting</span>', '<span class="status-pill warn">do not show generic error toast</span>', ['request started', 'abort() called'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: [], heap: ['Fetch request'] },
+  narration: {
+    title: 'Abort Path Completes',
+    what: 'fetch переходить у controlled abort path замість normal success path.',
+    why: 'Signal показує, що operation більше не актуальна для поточного UI lifetime.',
+    insight: 'Правильний UI treat-ить abort як expected control flow, а не як product failure.'
+  },
+  action: () => abortState('<span class="status-pill bad">controller aborted</span>', '<span class="status-pill bad">aborted = true</span>', '<span class="status-pill bad">fetch rejected with abort</span>', '<span class="status-pill ok">skip stale state update</span>', ['request started', 'abort() called', 'AbortError handled'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
