@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Browser vs Node Order Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+      flex: 1;
+      min-height: 0;
+    }
+    .panel {
+      background: #fff;
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      padding: 16px;
+      overflow: auto;
+    }
+    .section-title {
+      margin: 0 0 12px 0;
+      color: var(--color-stack);
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 58px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .row.compact {
+      grid-template-columns: 110px 1fr;
+    }
+    .label {
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      color: #415a77;
+      font-weight: 700;
+    }
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #c8d3dd;
+      border-radius: 6px;
+      background: #f8fafc;
+      font-size: 14px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .btn {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: var(--color-stack);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .btn.alt {
+      background: #6c7a89;
+    }
+    .btn:hover,
+    .preset-btn:hover {
+      opacity: 0.92;
+    }
+    .preset-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .preset-btn {
+      padding: 6px 10px;
+      border: 1px solid #c8d3dd;
+      border-radius: 999px;
+      background: #f8fafc;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .box {
+      border: 1px solid #d9e2ec;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .box-title {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #486581;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .sync-pill { background: #e8eef5; color: #334e68; border-color: #c9d6e2; }
+    .tick-pill { background: #fde8ff; color: #7a1e78; border-color: #e8b4e6; }
+    .micro-pill { background: #e2f3ff; color: #0b4f79; border-color: #8ec9f0; }
+    .task-pill { background: #fff1d6; color: #8a5a00; border-color: #f1cf80; }
+    .check-pill { background: #ece8ff; color: #4d3ca6; border-color: #b9b0f3; }
+    .render-pill { background: #e8f7ec; color: #166534; border-color: #9fd8af; }
+    .warn-pill { background: #ffe1e1; color: #8b1e1e; border-color: #f3b1b1; }
+    .code-preview {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .explain-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .muted {
+      color: #7b8794;
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #edf2f7;
+      color: #334e68;
+      margin-left: 8px;
+    }
+    @media (max-width: 980px) {
+      .board { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Browser vs Node Order Board</h2>
+    <p>Перемикай середовище, збирай сценарій і дивись, як змінюється порядок: browser queues vs Node phases</p>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Environment</h3>
+
+        <div class="row compact">
+          <div class="label">Runtime</div>
+          <select id="runtimeSelect">
+            <option value="browser">Browser</option>
+            <option value="node">Node.js</option>
+          </select>
+        </div>
+
+        <div class="row compact" id="nodeContextRow" style="display:none;">
+          <div class="label">Node ctx</div>
+          <select id="nodeContextSelect">
+            <option value="top-level">Top-level</option>
+            <option value="inside-io">Inside I/O callback</option>
+          </select>
+        </div>
+
+        <h3 class="section-title" style="margin-top:16px;">Scenario</h3>
+        <div id="slotContainer"></div>
+
+        <div class="toolbar">
+          <button id="analyzeBtn" class="btn">Analyze</button>
+          <button id="clearBtn" class="btn alt">Clear</button>
+        </div>
+
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="browser-promise-timeout">Browser: Promise vs Timeout</button>
+          <button class="preset-btn" data-preset="browser-render">Browser: Render Trap</button>
+          <button class="preset-btn" data-preset="node-top-level">Node: Top-level Mixed</button>
+          <button class="preset-btn" data-preset="node-io">Node: I/O Context</button>
+        </div>
+
+        <div class="box" style="margin-top:16px;">
+          <h4 class="box-title">Why This Board Exists</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">
+            Browser і Node не можна моделювати однією універсальною таблицею правил.
+            У browser важливі sync → microtasks → render chance → next task.
+            У Node важливі `process.nextTick`, promise microtasks і loop phases.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+
+        <div class="box">
+          <h4 class="box-title">Queues / Phases</h4>
+          <div id="queueSummary" class="pill-list"></div>
+        </div>
+
+        <div class="box">
+          <h4 class="box-title">Final Order</h4>
+          <div id="finalOrder" class="pill-list"></div>
+        </div>
+
+        <div class="box">
+          <h4 class="box-title">Why</h4>
+          <ol id="explainList" class="explain-list"></ol>
+        </div>
+
+        <div class="box">
+          <h4 class="box-title">Warnings</h4>
+          <div id="warningList" class="muted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const OPERATIONS = [
+      { value: 'empty', label: '— empty —', code: '' },
+      { value: 'sync-a', label: 'console.log("A")', code: 'console.log("A");', kind: 'sync', output: 'A', runtimes: ['browser', 'node'] },
+      { value: 'sync-b', label: 'console.log("B")', code: 'console.log("B");', kind: 'sync', output: 'B', runtimes: ['browser', 'node'] },
+      { value: 'timeout-t', label: 'setTimeout(() => console.log("T"), 0)', code: 'setTimeout(() => console.log("T"), 0);', kind: 'task', output: 'T', runtimes: ['browser', 'node'] },
+      { value: 'timeout-x', label: 'setTimeout(() => console.log("X"), 0)', code: 'setTimeout(() => console.log("X"), 0);', kind: 'task', output: 'X', runtimes: ['browser', 'node'] },
+      { value: 'promise-p', label: 'Promise.resolve().then(() => console.log("P"))', code: 'Promise.resolve().then(() => console.log("P"));', kind: 'microtask', output: 'P', runtimes: ['browser', 'node'] },
+      { value: 'promise-y', label: 'Promise.resolve().then(() => console.log("Y"))', code: 'Promise.resolve().then(() => console.log("Y"));', kind: 'microtask', output: 'Y', runtimes: ['browser', 'node'] },
+      { value: 'queue-q', label: 'queueMicrotask(() => console.log("Q"))', code: 'queueMicrotask(() => console.log("Q"));', kind: 'microtask', output: 'Q', runtimes: ['browser', 'node'] },
+      { value: 'await-w', label: 'async boundary -> continuation logs "W"', code: 'async function run() { await Promise.resolve(); console.log("W"); }\nrun();', kind: 'microtask', output: 'W', runtimes: ['browser', 'node'] },
+      { value: 'render', label: 'DOM mutation (render-sensitive step)', code: 'spinner.style.display = "block";', kind: 'render', output: 'render chance', runtimes: ['browser'] },
+      { value: 'nexttick-n', label: 'process.nextTick(() => console.log("N"))', code: 'process.nextTick(() => console.log("N"));', kind: 'nexttick', output: 'N', runtimes: ['node'] },
+      { value: 'nexttick-k', label: 'process.nextTick(() => console.log("K"))', code: 'process.nextTick(() => console.log("K"));', kind: 'nexttick', output: 'K', runtimes: ['node'] },
+      { value: 'immediate-i', label: 'setImmediate(() => console.log("I"))', code: 'setImmediate(() => console.log("I"));', kind: 'check', output: 'I', runtimes: ['node'] },
+      { value: 'immediate-j', label: 'setImmediate(() => console.log("J"))', code: 'setImmediate(() => console.log("J"));', kind: 'check', output: 'J', runtimes: ['node'] }
+    ];
+
+    const SLOTS = 6;
+    const runtimeSelect = document.getElementById('runtimeSelect');
+    const nodeContextRow = document.getElementById('nodeContextRow');
+    const nodeContextSelect = document.getElementById('nodeContextSelect');
+    const slotContainer = document.getElementById('slotContainer');
+    const codePreview = document.getElementById('codePreview');
+    const queueSummary = document.getElementById('queueSummary');
+    const finalOrder = document.getElementById('finalOrder');
+    const explainList = document.getElementById('explainList');
+    const warningList = document.getElementById('warningList');
+
+    function getRuntime() {
+      return runtimeSelect.value;
+    }
+
+    function visibleOperations() {
+      const runtime = getRuntime();
+      return OPERATIONS.filter((op) => op.runtimes ? op.runtimes.includes(runtime) || op.value === 'empty' : true);
+    }
+
+    function buildOptions(selectedValue) {
+      return visibleOperations().map((op) => {
+        const selected = op.value === selectedValue ? 'selected' : '';
+        return `<option value="${op.value}" ${selected}>${op.label}</option>`;
+      }).join('');
+    }
+
+    function createSlots(preserve = []) {
+      slotContainer.innerHTML = '';
+      for (let i = 0; i < SLOTS; i++) {
+        const currentValue = preserve[i] || 'empty';
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `
+          <div class="label">#${i + 1}</div>
+          <select data-slot="${i}">${buildOptions(currentValue)}</select>
+        `;
+        slotContainer.appendChild(row);
+      }
+    }
+
+    function selectedValues() {
+      return [...slotContainer.querySelectorAll('select')].map((select) => select.value);
+    }
+
+    function getSelectedOps() {
+      return [...slotContainer.querySelectorAll('select')]
+        .map((select) => OPERATIONS.find((op) => op.value === select.value))
+        .filter(Boolean);
+    }
+
+    function renderPills(container, items) {
+      container.innerHTML = items.length
+        ? items.map((item) => `<span class="pill ${item.kind}">${item.label}</span>`).join('')
+        : '<span class="muted">empty</span>';
+    }
+
+    function analyzeBrowser(ops) {
+      const sync = [];
+      const micro = [];
+      const tasks = [];
+      let hasRender = false;
+      const warnings = [];
+      const codeLines = [];
+
+      for (const op of ops) {
+        if (!op || op.value === 'empty') continue;
+        if (!op.runtimes.includes('browser')) {
+          warnings.push(`Операція ${op.label} не належить browser runtime і буде проігнорована.`);
+          continue;
+        }
+        codeLines.push(op.code);
+        if (op.kind === 'sync') sync.push(op.output);
+        if (op.kind === 'microtask') micro.push(op.output);
+        if (op.kind === 'task') tasks.push(op.output);
+        if (op.kind === 'render') hasRender = true;
+      }
+
+      const queuePills = [];
+      if (sync.length) queuePills.push(...sync.map((x) => ({ label: `sync:${x}`, kind: 'sync-pill' })));
+      if (micro.length) queuePills.push(...micro.map((x) => ({ label: `micro:${x}`, kind: 'micro-pill' })));
+      if (tasks.length) queuePills.push(...tasks.map((x) => ({ label: `task:${x}`, kind: 'task-pill' })));
+      if (hasRender) queuePills.push({ label: 'render-sensitive DOM step', kind: 'render-pill' });
+
+      const final = [];
+      sync.forEach((x) => final.push({ label: x, kind: 'sync-pill' }));
+      micro.forEach((x) => final.push({ label: x, kind: 'micro-pill' }));
+      if (hasRender) final.push({ label: 'render chance', kind: 'render-pill' });
+      tasks.forEach((x) => final.push({ label: x, kind: 'task-pill' }));
+
+      const explanations = [
+        'Browser model: спочатку весь sync-код у поточному task.',
+        micro.length
+          ? 'Після цього runtime повністю дренує microtask queue у FIFO-порядку.'
+          : 'Microtask queue порожня, тому після sync-коду немає continuation phase.',
+        hasRender
+          ? 'DOM mutation дає лише шанс на render після sync-коду і після microtasks.'
+          : 'Окремої render-sensitive DOM mutation тут немає.',
+        tasks.length
+          ? 'Callbacks із setTimeout доходять до виконання лише після microtasks і після потенційного render chance.'
+          : 'Task queue у цьому сценарії не створює додаткових callbacks.'
+      ];
+
+      return {
+        code: codeLines.length ? codeLines.join('\n') : '// choose browser operations',
+        queuePills,
+        final,
+        explanations,
+        warnings
+      };
+    }
+
+    function analyzeNode(ops) {
+      const context = nodeContextSelect.value;
+      const sync = [];
+      const nextTicks = [];
+      const micro = [];
+      const timers = [];
+      const checks = [];
+      const warnings = [];
+      const codeLines = [];
+
+      for (const op of ops) {
+        if (!op || op.value === 'empty') continue;
+        if (!op.runtimes.includes('node')) {
+          warnings.push(`Операція ${op.label} не належить Node.js runtime і буде проігнорована.`);
+          continue;
+        }
+        codeLines.push(op.code);
+        if (op.kind === 'sync') sync.push(op.output);
+        if (op.kind === 'nexttick') nextTicks.push(op.output);
+        if (op.kind === 'microtask') micro.push(op.output);
+        if (op.kind === 'task') timers.push(op.output);
+        if (op.kind === 'check') checks.push(op.output);
+      }
+
+      const queuePills = [];
+      if (sync.length) queuePills.push(...sync.map((x) => ({ label: `sync:${x}`, kind: 'sync-pill' })));
+      if (nextTicks.length) queuePills.push(...nextTicks.map((x) => ({ label: `nextTick:${x}`, kind: 'tick-pill' })));
+      if (micro.length) queuePills.push(...micro.map((x) => ({ label: `promise/queueMicrotask:${x}`, kind: 'micro-pill' })));
+      if (timers.length) queuePills.push(...timers.map((x) => ({ label: `timers:${x}`, kind: 'task-pill' })));
+      if (checks.length) queuePills.push(...checks.map((x) => ({ label: `check:${x}`, kind: 'check-pill' })));
+
+      const final = [];
+      sync.forEach((x) => final.push({ label: x, kind: 'sync-pill' }));
+      nextTicks.forEach((x) => final.push({ label: x, kind: 'tick-pill' }));
+      micro.forEach((x) => final.push({ label: x, kind: 'micro-pill' }));
+
+      if (context === 'inside-io') {
+        checks.forEach((x) => final.push({ label: x, kind: 'check-pill' }));
+        timers.forEach((x) => final.push({ label: x, kind: 'task-pill' }));
+      } else {
+        if (checks.length && timers.length) {
+          final.push({ label: 'timeout/immediate: context-dependent at top-level', kind: 'warn-pill' });
+          warnings.push('На top-level порядок між setTimeout(0) і setImmediate не варто вчити як абсолютне правило.');
+        } else {
+          timers.forEach((x) => final.push({ label: x, kind: 'task-pill' }));
+          checks.forEach((x) => final.push({ label: x, kind: 'check-pill' }));
+        }
+      }
+
+      const explanations = [
+        'Node model: спочатку sync-код, потім process.nextTick, потім promise microtasks.',
+        nextTicks.length
+          ? 'process.nextTick queue дренується раніше за promise microtasks.'
+          : 'nextTick queue порожня, тому після sync-коду її впливу немає.',
+        micro.length
+          ? 'Promise/queueMicrotask callbacks ідуть після nextTick, але до phases loop.'
+          : 'Promise microtasks у цьому сценарії відсутні.',
+        context === 'inside-io'
+          ? 'Inside I/O callback check phase із setImmediate зазвичай спостерігається раніше за timers phase.'
+          : 'Top-level scheduling не дає такої жорсткої гарантії для timeout vs immediate, як inside I/O context.'
+      ];
+
+      return {
+        code: codeLines.length ? codeLines.join('\n') : '// choose node operations',
+        queuePills,
+        final,
+        explanations,
+        warnings
+      };
+    }
+
+    function analyze() {
+      const runtime = getRuntime();
+      const ops = getSelectedOps();
+      const result = runtime === 'browser' ? analyzeBrowser(ops) : analyzeNode(ops);
+      codePreview.textContent = result.code;
+      renderPills(queueSummary, result.queuePills);
+      renderPills(finalOrder, result.final);
+      explainList.innerHTML = result.explanations.map((item) => `<li>${item}</li>`).join('');
+      warningList.innerHTML = result.warnings.length
+        ? result.warnings.map((item) => `<div style="margin-bottom:6px;">${item}</div>`).join('')
+        : '<span class="muted">no special warnings</span>';
+    }
+
+    function applyPreset(name) {
+      const presets = {
+        'browser-promise-timeout': { runtime: 'browser', context: 'top-level', values: ['sync-a', 'timeout-t', 'promise-p', 'sync-b', 'empty', 'empty'] },
+        'browser-render': { runtime: 'browser', context: 'top-level', values: ['render', 'promise-p', 'timeout-t', 'sync-a', 'empty', 'empty'] },
+        'node-top-level': { runtime: 'node', context: 'top-level', values: ['sync-a', 'nexttick-n', 'promise-p', 'timeout-t', 'immediate-i', 'empty'] },
+        'node-io': { runtime: 'node', context: 'inside-io', values: ['sync-a', 'nexttick-n', 'promise-p', 'timeout-t', 'immediate-i', 'empty'] }
+      };
+      const preset = presets[name];
+      if (!preset) return;
+      runtimeSelect.value = preset.runtime;
+      nodeContextSelect.value = preset.context;
+      syncUI();
+      createSlots(preset.values);
+      analyze();
+    }
+
+    function syncUI() {
+      nodeContextRow.style.display = getRuntime() === 'node' ? 'grid' : 'none';
+    }
+
+    runtimeSelect.addEventListener('change', () => {
+      const previous = selectedValues();
+      syncUI();
+      createSlots(previous);
+      analyze();
+    });
+
+    nodeContextSelect.addEventListener('change', analyze);
+    document.getElementById('analyzeBtn').addEventListener('click', analyze);
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      createSlots();
+      analyze();
+    });
+    document.querySelectorAll('.preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
+    syncUI();
+    createSlots();
+    applyPreset('browser-promise-timeout');
+  </script>
+</body>
+</html>
