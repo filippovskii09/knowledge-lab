@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Scheduler Comparison Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+      flex: 1;
+      min-height: 0;
+    }
+    .panel {
+      background: #fff;
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      padding: 16px;
+      overflow: auto;
+    }
+    .section-title {
+      margin: 0 0 12px 0;
+      color: var(--color-stack);
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .label {
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      color: #415a77;
+      font-weight: 700;
+    }
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #c8d3dd;
+      border-radius: 6px;
+      background: #f8fafc;
+      font-size: 14px;
+    }
+    .toolbar, .preset-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .btn, .preset-btn {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: var(--color-stack);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .preset-btn {
+      background: #f8fafc;
+      color: #243b53;
+      border: 1px solid #c8d3dd;
+      font-size: 13px;
+      padding: 6px 10px;
+    }
+    .btn.alt {
+      background: #6c7a89;
+    }
+    .box {
+      border: 1px solid #d9e2ec;
+      border-radius: 8px;
+      background: #f8fafc;
+      padding: 12px;
+      margin-bottom: 14px;
+    }
+    .box-title {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #486581;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+    .micro-pill { background: #e2f3ff; color: #0b4f79; border-color: #8ec9f0; }
+    .task-pill { background: #fff1d6; color: #8a5a00; border-color: #f1cf80; }
+    .raf-pill { background: #ece8ff; color: #4d3ca6; border-color: #b9b0f3; }
+    .warn-pill { background: #ffe1e1; color: #8b1e1e; border-color: #f3b1b1; }
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .frame {
+      border: 1px solid #d9e2ec;
+      border-radius: 8px;
+      background: #fff;
+      min-height: 190px;
+      padding: 10px;
+    }
+    .frame h4 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: #243b53;
+    }
+    .lane {
+      margin-bottom: 10px;
+    }
+    .lane-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: #7b8794;
+      margin-bottom: 4px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .event {
+      font-size: 12px;
+      border-radius: 6px;
+      padding: 5px 7px;
+      margin-bottom: 5px;
+      border: 1px solid #d9e2ec;
+      background: #f8fafc;
+      color: #243b53;
+      font-family: Consolas, monospace;
+    }
+    .event.sync { background: #eef3f8; }
+    .event.micro { background: #e7f4ff; }
+    .event.task { background: #fff5df; }
+    .event.raf { background: #f0ecff; }
+    .event.render { background: #edf9f0; }
+    .event.missed { background: #ffe7e7; border-color: #f0b6b6; }
+    .explain-list {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .code-preview {
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 8px;
+      padding: 14px;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+    .muted { color: #7b8794; font-size: 14px; }
+    @media (max-width: 980px) {
+      .board { grid-template-columns: 1fr; }
+      .timeline { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .timeline { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Scheduler Comparison Board</h2>
+    <p>Порівнюй `Promise`, `setTimeout` і `requestAnimationFrame` не як три способи відкласти код, а як три різні моделі scheduling</p>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Scenario</h3>
+
+        <div class="row">
+          <div class="label">Scheduler</div>
+          <select id="schedulerSelect">
+            <option value="promise">Promise.then</option>
+            <option value="timeout">setTimeout(16)</option>
+            <option value="raf">requestAnimationFrame</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="label">Start point</div>
+          <select id="phaseSelect">
+            <option value="early">Frame just started (~2ms)</option>
+            <option value="mid">Middle of frame (~8ms)</option>
+            <option value="late">End of frame (~15ms)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="label">Work before</div>
+          <select id="loadSelect">
+            <option value="none">No extra sync work</option>
+            <option value="light">Light sync work (~4ms)</option>
+            <option value="medium">Medium sync work (~10ms)</option>
+            <option value="heavy">Heavy sync work (~22ms)</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="label">Intent</div>
+          <select id="intentSelect">
+            <option value="visual">Visual DOM update before paint</option>
+            <option value="yield">Yield to browser before heavy work</option>
+            <option value="retry">Delayed non-visual retry</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <div class="label">Tab state</div>
+          <select id="tabSelect">
+            <option value="active">Active tab</option>
+            <option value="background">Background tab</option>
+          </select>
+        </div>
+
+        <div class="toolbar">
+          <button id="analyzeBtn" class="btn">Analyze</button>
+          <button id="clearBtn" class="btn alt">Reset</button>
+        </div>
+
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="animation">Animation Tick</button>
+          <button class="preset-btn" data-preset="spinner-trap">Spinner Trap</button>
+          <button class="preset-btn" data-preset="retry">Retry Timer</button>
+          <button class="preset-btn" data-preset="bg-tab">Background Tab</button>
+        </div>
+
+        <div class="box" style="margin-top:16px;">
+          <h4 class="box-title">Mental Model</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">
+            `Promise` не дає paint boundary. `setTimeout` дає task boundary, але без frame alignment.
+            `requestAnimationFrame` живе в rendering scheduler і прив'язаний до наступного кадру.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+
+        <div class="box">
+          <h4 class="box-title">Verdict</h4>
+          <div id="verdict" class="pill-list"></div>
+        </div>
+
+        <div class="box">
+          <h4 class="box-title">Timeline</h4>
+          <div id="timeline" class="timeline"></div>
+        </div>
+
+        <div class="box">
+          <h4 class="box-title">Why</h4>
+          <ol id="whyList" class="explain-list"></ol>
+        </div>
+
+        <div class="box">
+          <h4 class="box-title">Warnings</h4>
+          <div id="warningList" class="muted"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FRAME_MS = 16.7;
+    const phaseStartMap = { early: 2, mid: 8, late: 15 };
+    const loadMap = { none: 0, light: 4, medium: 10, heavy: 22 };
+
+    const schedulerSelect = document.getElementById('schedulerSelect');
+    const phaseSelect = document.getElementById('phaseSelect');
+    const loadSelect = document.getElementById('loadSelect');
+    const intentSelect = document.getElementById('intentSelect');
+    const tabSelect = document.getElementById('tabSelect');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const codePreview = document.getElementById('codePreview');
+    const verdict = document.getElementById('verdict');
+    const timeline = document.getElementById('timeline');
+    const whyList = document.getElementById('whyList');
+    const warningList = document.getElementById('warningList');
+
+    const presets = {
+      animation: { scheduler: 'raf', phase: 'early', load: 'light', intent: 'visual', tab: 'active' },
+      'spinner-trap': { scheduler: 'promise', phase: 'mid', load: 'heavy', intent: 'yield', tab: 'active' },
+      retry: { scheduler: 'timeout', phase: 'late', load: 'none', intent: 'retry', tab: 'active' },
+      'bg-tab': { scheduler: 'raf', phase: 'mid', load: 'light', intent: 'visual', tab: 'background' }
+    };
+
+    function makeFrames() {
+      return [0, 1, 2, 3].map(i => ({
+        title: `Frame ${i}`,
+        lanes: {
+          sync: [],
+          scheduler: [],
+          render: []
+        }
+      }));
+    }
+
+    function addEvent(frames, frameIndex, lane, text, cls = '') {
+      if (frameIndex < 0 || frameIndex >= frames.length) return;
+      frames[frameIndex].lanes[lane].push({ text, cls });
+    }
+
+    function renderFrames(frames) {
+      timeline.innerHTML = '';
+      frames.forEach(frame => {
+        const node = document.createElement('div');
+        node.className = 'frame';
+        node.innerHTML = `
+          <h4>${frame.title}</h4>
+          <div class="lane">
+            <div class="lane-title">Main Thread / Sync</div>
+            ${(frame.lanes.sync.length ? frame.lanes.sync : [{ text: '—', cls: '' }]).map(e => `<div class="event sync ${e.cls}">${e.text}</div>`).join('')}
+          </div>
+          <div class="lane">
+            <div class="lane-title">Scheduler</div>
+            ${(frame.lanes.scheduler.length ? frame.lanes.scheduler : [{ text: '—', cls: 'task' }]).map(e => `<div class="event ${e.cls || 'task'}">${e.text}</div>`).join('')}
+          </div>
+          <div class="lane">
+            <div class="lane-title">Render</div>
+            ${(frame.lanes.render.length ? frame.lanes.render : [{ text: '—', cls: '' }]).map(e => `<div class="event render ${e.cls}">${e.text}</div>`).join('')}
+          </div>
+        `;
+        timeline.appendChild(node);
+      });
+    }
+
+    function buildCode(scheduler, intent) {
+      const callback = intent === 'retry'
+        ? 'retryRequest();'
+        : intent === 'yield'
+          ? 'heavyTransform();'
+          : 'box.style.transform = `translateX(${x}px)`;';
+
+      if (scheduler === 'promise') {
+        return `doSyncWork();\nPromise.resolve().then(() => {\n  ${callback}\n});`;
+      }
+      if (scheduler === 'timeout') {
+        return `doSyncWork();\nsetTimeout(() => {\n  ${callback}\n}, 16);`;
+      }
+      return `doSyncWork();\nrequestAnimationFrame((ts) => {\n  ${callback}\n});`;
+    }
+
+    function analyze() {
+      const scheduler = schedulerSelect.value;
+      const phase = phaseSelect.value;
+      const load = loadSelect.value;
+      const intent = intentSelect.value;
+      const tab = tabSelect.value;
+
+      const start = phaseStartMap[phase];
+      const extra = loadMap[load];
+      const workEndsAt = start + extra;
+      const frames = makeFrames();
+      const why = [];
+      const warnings = [];
+      const verdictPills = [];
+
+      addEvent(frames, 0, 'sync', `start @ ${start.toFixed(1)}ms`);
+      addEvent(frames, 0, 'sync', extra ? `extra sync work ${extra}ms` : 'no extra sync work');
+
+      let callbackFrame = 0;
+      let renderFrame = 0;
+
+      if (scheduler === 'promise') {
+        addEvent(frames, 0, 'scheduler', 'Promise microtask callback', 'micro');
+        why.push('`Promise.then` іде в microtask queue і дренується до того, як browser віддасть control на render або next task.');
+        if (workEndsAt > FRAME_MS) {
+          renderFrame = 1;
+          addEvent(frames, 0, 'render', 'current frame missed', 'missed');
+          why.push('Через sync work поточний frame budget уже зламаний, тому paint переноситься на наступний render opportunity.');
+        } else {
+          renderFrame = 0;
+          why.push('Microtask виконується ще в межах поточного turn, тому browser бачить callback до найближчого paint.');
+        }
+        if (intent === 'yield') {
+          warnings.push('`Promise.then` не дає справжнього yield до browser render. Це часта помилка в spinner/loading сценаріях.');
+        }
+        if (intent === 'retry') {
+          warnings.push('Для delayed retry microtask майже ніколи не є правильною моделлю.');
+        }
+      } else if (scheduler === 'timeout') {
+        callbackFrame = Math.max(1, Math.floor((start + 16) / FRAME_MS));
+        addEvent(frames, callbackFrame, 'scheduler', 'timer task callback', 'task');
+        why.push('`setTimeout(16)` лише гарантує “не раніше ніж через ~16ms”, але callback заходить через task queue, а не перед paint.');
+        renderFrame = workEndsAt > FRAME_MS ? 1 : 0;
+        if (workEndsAt > FRAME_MS) {
+          addEvent(frames, 0, 'render', 'current frame missed', 'missed');
+        }
+        why.push('Browser може зробити paint до timer callback, між timer callbacks або після них — frame alignment тут не гарантується.');
+        if (intent === 'visual') {
+          warnings.push('Для animation `setTimeout` схильний до jitter і drift, бо не синхронізований з refresh cycle.');
+        }
+      } else {
+        if (tab === 'background') {
+          callbackFrame = 2;
+          addEvent(frames, 2, 'scheduler', 'rAF paused/throttled until visible', 'raf');
+          why.push('У background tab `requestAnimationFrame` часто паузиться або сильно throttled. Це очікувана browser policy.');
+          warnings.push('`requestAnimationFrame` не підходить для background retries або non-visual bookkeeping.');
+          renderFrame = 0;
+        } else {
+          callbackFrame = workEndsAt > FRAME_MS ? 1 : 0;
+          addEvent(frames, callbackFrame, 'scheduler', 'rAF callback before paint', 'raf');
+          why.push('`requestAnimationFrame` ставить callback у rendering scheduler і викликається перед наступним paint.');
+          if (workEndsAt > FRAME_MS) {
+            addEvent(frames, 0, 'render', 'current frame missed', 'missed');
+            why.push('Через sync work поточний кадр уже втрачено, тому rAF callback зсунувся до наступного frame boundary.');
+          } else {
+            why.push('Якщо main thread встигає, rAF callback може ще потрапити в найближчий кадр.');
+          }
+          renderFrame = callbackFrame;
+        }
+        if (intent === 'retry') {
+          warnings.push('Для delayed retry `requestAnimationFrame` зазвичай неправильний вибір: він прив'язує не-візуальну логіку до paint lifecycle.');
+        }
+      }
+
+      if (scheduler !== 'raf' && tab === 'background') {
+        warnings.push('У background tab timers теж можуть бути throttled; точний delay стає менш передбачуваним.');
+      }
+
+      addEvent(frames, renderFrame, 'render', 'paint happens');
+
+      if (scheduler === 'raf' && intent === 'visual' && tab === 'active') {
+        verdictPills.push({ text: 'best fit for visual work', cls: 'raf-pill' });
+      } else if (scheduler === 'timeout' && intent === 'retry') {
+        verdictPills.push({ text: 'reasonable for delayed retry', cls: 'task-pill' });
+      } else if (scheduler === 'promise' && intent === 'yield') {
+        verdictPills.push({ text: 'wrong if you need paint first', cls: 'warn-pill' });
+      } else if (scheduler === 'timeout' && intent === 'visual') {
+        verdictPills.push({ text: 'works, but not frame-aligned', cls: 'warn-pill' });
+      } else {
+        verdictPills.push({ text: 'context-dependent choice', cls: scheduler === 'promise' ? 'micro-pill' : scheduler === 'timeout' ? 'task-pill' : 'raf-pill' });
+      }
+
+      if (intent === 'visual') {
+        why.push('Для UI animation головне питання — не “коли-небудь пізніше”, а “чи потрапляю я в правильний кадр перед paint”.');
+      } else if (intent === 'yield') {
+        why.push('Для spinner/loading головне питання — чи віддав ти browser-у render opportunity до важкої роботи.');
+      } else {
+        why.push('Для retry/backoff головне питання — coarse delay і control over scheduling, а не frame sync.');
+      }
+
+      codePreview.textContent = buildCode(scheduler, intent);
+      verdict.innerHTML = verdictPills.map(p => `<span class="pill ${p.cls}">${p.text}</span>`).join('');
+      renderFrames(frames);
+      whyList.innerHTML = why.map(item => `<li>${item}</li>`).join('');
+      warningList.innerHTML = warnings.length
+        ? warnings.map(w => `<span class="pill warn-pill">${w}</span>`).join(' ')
+        : 'No extra warnings for this scenario.';
+    }
+
+    function reset() {
+      schedulerSelect.value = 'promise';
+      phaseSelect.value = 'early';
+      loadSelect.value = 'none';
+      intentSelect.value = 'visual';
+      tabSelect.value = 'active';
+      analyze();
+    }
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const preset = presets[btn.dataset.preset];
+        schedulerSelect.value = preset.scheduler;
+        phaseSelect.value = preset.phase;
+        loadSelect.value = preset.load;
+        intentSelect.value = preset.intent;
+        tabSelect.value = preset.tab;
+        analyze();
+      });
+    });
+
+    analyzeBtn.addEventListener('click', analyze);
+    clearBtn.addEventListener('click', reset);
+    analyze();
+  </script>
+</body>
+</html>
