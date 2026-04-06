@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Async Error Propagation Debug Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board { display:grid; grid-template-columns:380px 1fr; gap:20px; flex:1; min-height:0; }
+    .panel { background:#fff; border:2px solid var(--color-border); border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,.08); padding:16px; overflow:auto; }
+    .section-title { margin:0 0 12px; color:var(--color-stack); font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .row { display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; margin-bottom:10px; }
+    .label { font-family:Consolas, monospace; font-size:13px; color:#415a77; font-weight:700; }
+    select { width:100%; padding:8px 10px; border:1px solid #c8d3dd; border-radius:6px; background:#f8fafc; font-size:14px; }
+    .toolbar, .preset-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn, .preset-btn { padding:8px 12px; border:none; border-radius:6px; background:var(--color-stack); color:#fff; cursor:pointer; font-weight:700; }
+    .btn.alt { background:#6c7a89; }
+    .preset-btn { background:#f8fafc; color:#243b53; border:1px solid #c8d3dd; font-size:13px; padding:6px 10px; }
+    .box { border:1px solid #d9e2ec; border-radius:8px; background:#f8fafc; padding:12px; margin-bottom:14px; }
+    .box-title { margin:0 0 8px; font-size:13px; text-transform:uppercase; color:#486581; font-weight:700; letter-spacing:.04em; }
+    .pill-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-family:Consolas, monospace; font-size:13px; font-weight:700; border:1px solid transparent; }
+    .sync-pill { background:#e8eef5; color:#334e68; border-color:#c9d6e2; }
+    .await-pill { background:#e2f3ff; color:#0b4f79; border-color:#8ec9f0; }
+    .catch-pill { background:#e8f7ec; color:#166534; border-color:#9fd8af; }
+    .warn-pill { background:#fff1d6; color:#8a5a00; border-color:#f1cf80; }
+    .bad-pill { background:#ffe1e1; color:#8b1e1e; border-color:#f3b1b1; }
+    .timeline { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; }
+    .step { border:1px solid #d9e2ec; border-radius:8px; background:#fff; min-height:170px; padding:10px; }
+    .step h4 { margin:0 0 8px; font-size:13px; color:#243b53; }
+    .event { font-size:12px; border-radius:6px; padding:5px 7px; margin-bottom:5px; border:1px solid #d9e2ec; background:#f8fafc; color:#243b53; font-family:Consolas, monospace; }
+    .event.sync { background:#eef3f8; }
+    .event.await { background:#e7f4ff; }
+    .event.catch { background:#edf9f0; }
+    .event.warn { background:#fff6e2; }
+    .event.bad { background:#ffe9e9; }
+    .code-preview { background:var(--code-bg); color:var(--code-text); border-radius:8px; padding:14px; font-family:Consolas, monospace; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+    .explain-list { margin:0; padding-left:20px; }
+    .muted { color:#7b8794; font-size:14px; }
+    @media (max-width: 1100px) { .board { grid-template-columns:1fr; } .timeline { grid-template-columns:1fr 1fr; } }
+    @media (max-width: 640px) { .timeline { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Async Error Propagation Debug Board</h2>
+    <p>Моделюй `throw`, `reject`, forgotten `await`, `.catch`, `try/catch`, unhandled rejection і втрату stack context</p>
+  </div>
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Scenario</h3>
+        <div class="row"><div class="label">Producer</div><select id="producerSelect"><option value="async-throw">async function throws</option><option value="promise-reject">Promise.reject(...)</option><option value="sync-throw">sync function throws</option></select></div>
+        <div class="row"><div class="label">Caller</div><select id="callerSelect"><option value="await-try">await inside try/catch</option><option value="no-await-try">call without await inside try/catch</option><option value="promise-catch">promise chain with .catch()</option><option value="no-handler">no local handler</option></select></div>
+        <div class="row"><div class="label">Rethrow</div><select id="rethrowSelect"><option value="no">Do not rethrow</option><option value="yes">Rethrow from catch</option></select></div>
+        <div class="row"><div class="label">Catch style</div><select id="catchSelect"><option value="normal">Meaningful catch</option><option value="swallow">Empty/silent catch</option></select></div>
+        <div class="row"><div class="label">Stack view</div><select id="stackSelect"><option value="same">Single boundary</option><option value="gap">Across async gap</option></select></div>
+        <div class="toolbar">
+          <button id="analyzeBtn" class="btn">Analyze</button>
+          <button id="resetBtn" class="btn alt">Reset</button>
+        </div>
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="forgotten-await">Forgotten await</button>
+          <button class="preset-btn" data-preset="proper-await">Proper await</button>
+          <button class="preset-btn" data-preset="swallowed-catch">Swallowed catch</button>
+          <button class="preset-btn" data-preset="unhandled">Unhandled rejection</button>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <h4 class="box-title">Mental Model</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">`throw` у `async function` назовні виглядає як rejected promise. `try/catch` ловить лише те, що реально проходить через поточний execution path. Забутий `await` часто і є тим місцем, де ламається error model.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+        <div class="box"><h4 class="box-title">Verdict</h4><div id="verdict" class="pill-list"></div></div>
+        <div class="box"><h4 class="box-title">Timeline</h4><div id="timeline" class="timeline"></div></div>
+        <div class="box"><h4 class="box-title">Why</h4><ol id="whyList" class="explain-list"></ol></div>
+        <div class="box"><h4 class="box-title">Warnings</h4><div id="warningList" class="muted"></div></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const producerSelect = document.getElementById('producerSelect');
+    const callerSelect = document.getElementById('callerSelect');
+    const rethrowSelect = document.getElementById('rethrowSelect');
+    const catchSelect = document.getElementById('catchSelect');
+    const stackSelect = document.getElementById('stackSelect');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const codePreview = document.getElementById('codePreview');
+    const verdict = document.getElementById('verdict');
+    const timeline = document.getElementById('timeline');
+    const whyList = document.getElementById('whyList');
+    const warningList = document.getElementById('warningList');
+
+    const presets = {
+      'forgotten-await': { producer: 'async-throw', caller: 'no-await-try', rethrow: 'no', catch: 'normal', stack: 'gap' },
+      'proper-await': { producer: 'async-throw', caller: 'await-try', rethrow: 'no', catch: 'normal', stack: 'gap' },
+      'swallowed-catch': { producer: 'promise-reject', caller: 'promise-catch', rethrow: 'no', catch: 'swallow', stack: 'gap' },
+      'unhandled': { producer: 'promise-reject', caller: 'no-handler', rethrow: 'no', catch: 'normal', stack: 'gap' }
+    };
+
+    function buildProducer(cfg) {
+      if (cfg.producer === 'sync-throw') return `function save() {\n  throw new Error("boom");\n}`;
+      if (cfg.producer === 'promise-reject') return `function save() {\n  return Promise.reject(new Error("boom"));\n}`;
+      return `async function save() {\n  throw new Error("boom");\n}`;
+    }
+
+    function buildCaller(cfg) {
+      const catchBody = cfg.catch === 'swallow'
+        ? `    // swallowed\n`
+        : `    console.log("caught", err.message);\n`;
+      const rethrow = cfg.rethrow === 'yes' ? `    throw err;\n` : ``;
+
+      if (cfg.caller === 'await-try') {
+        return `async function main() {\n  try {\n    await save();\n    console.log("after save");\n  } catch (err) {\n${catchBody}${rethrow}  }\n}`;
+      }
+      if (cfg.caller === 'no-await-try') {
+        return `async function main() {\n  try {\n    save();\n    console.log("after save");\n  } catch (err) {\n${catchBody}${rethrow}  }\n}`;
+      }
+      if (cfg.caller === 'promise-catch') {
+        return `function main() {\n  save()\n    .then(() => console.log("after save"))\n    .catch((err) => {\n${catchBody}${rethrow}    });\n}`;
+      }
+      return `function main() {\n  save();\n  console.log("after save");\n}`;
+    }
+
+    function makeSteps() {
+      return [0, 1, 2, 3, 4].map(i => ({ title: `Step ${i + 1}`, items: [] }));
+    }
+
+    function add(steps, idx, text, cls) {
+      if (idx < 0 || idx >= steps.length) return;
+      steps[idx].items.push({ text, cls });
+    }
+
+    function renderSteps(steps) {
+      timeline.innerHTML = '';
+      steps.forEach(step => {
+        const node = document.createElement('div');
+        node.className = 'step';
+        node.innerHTML = `<h4>${step.title}</h4>${(step.items.length ? step.items : [{ text: '—', cls: 'warn' }]).map(i => `<div class="event ${i.cls}">${i.text}</div>`).join('')}`;
+        timeline.appendChild(node);
+      });
+    }
+
+    function analyze() {
+      const cfg = {
+        producer: producerSelect.value,
+        caller: callerSelect.value,
+        rethrow: rethrowSelect.value,
+        catch: catchSelect.value,
+        stack: stackSelect.value
+      };
+
+      const steps = makeSteps();
+      const why = [];
+      const warnings = [];
+      const pills = [];
+
+      add(steps, 0, 'main() enters', 'sync');
+      add(steps, 0, `producer: ${cfg.producer}`, cfg.producer === 'sync-throw' ? 'sync' : 'await');
+
+      const asyncProducer = cfg.producer !== 'sync-throw';
+      const promiseCatch = cfg.caller === 'promise-catch';
+
+      if (cfg.caller === 'await-try') add(steps, 1, 'await save()', 'await');
+      else if (cfg.caller === 'no-await-try') add(steps, 1, 'save() called without await', 'warn');
+      else if (cfg.caller === 'promise-catch') add(steps, 1, '.catch handler attached', 'catch');
+      else add(steps, 1, 'no local handler attached', 'bad');
+
+      let caughtLocally = false;
+      let unhandled = false;
+      let afterSaveRuns = false;
+
+      if (!asyncProducer) {
+        if (cfg.caller === 'await-try' || cfg.caller === 'no-await-try') {
+          caughtLocally = true;
+          add(steps, 2, 'sync throw hits try/catch immediately', 'catch');
+          why.push('Синхронний throw проходить через поточний stack frame, тому `try/catch` може його перехопити одразу.');
+          pills.push({ text: 'sync throw caught locally', cls: 'catch-pill' });
+        } else if (promiseCatch) {
+          add(steps, 2, 'sync throw happens before promise chain handles it', 'bad');
+          unhandled = true;
+          warnings.push('`.catch()` у promise chain не рятує від sync throw, якщо код не дійшов до promise chain.');
+          pills.push({ text: 'handler mismatch', cls: 'warn-pill' });
+        } else {
+          add(steps, 2, 'sync throw escapes', 'bad');
+          unhandled = true;
+        }
+      } else {
+        if (cfg.caller === 'await-try') {
+          caughtLocally = true;
+          add(steps, 2, 'rejection resumed through await as throw', 'await');
+          why.push('`await` перетворює rejection на throw у точці resume, тому локальний `catch` бачить помилку.');
+          pills.push({ text: 'await restores catch visibility', cls: 'await-pill' });
+        } else if (cfg.caller === 'no-await-try') {
+          afterSaveRuns = true;
+          add(steps, 2, 'rejected promise escapes local try/catch', 'bad');
+          why.push('Без `await` локальний `try/catch` не бачить rejected promise як sync throw у поточному frame.');
+          warnings.push('Це класичний forgotten `await`: код після виклику ще продовжує виконуватися.');
+          pills.push({ text: 'forgotten await', cls: 'warn-pill' });
+          unhandled = true;
+        } else if (promiseCatch) {
+          caughtLocally = true;
+          add(steps, 2, '.catch handles rejection', 'catch');
+          why.push('Promise chain із `.catch()` ловить rejection, якщо він під’єднаний до того самого chain.');
+          pills.push({ text: '.catch handles rejection', cls: 'catch-pill' });
+        } else {
+          add(steps, 2, 'rejection has no local handler', 'bad');
+          unhandled = true;
+        }
+      }
+
+      if (afterSaveRuns) add(steps, 3, '"after save" still runs', 'warn');
+      if (caughtLocally) add(steps, 3, cfg.catch === 'swallow' ? 'catch swallows the error' : 'catch sees the error', 'catch');
+
+      if (cfg.rethrow === 'yes' && caughtLocally) {
+        add(steps, 4, 'error rethrown upward', 'bad');
+        warnings.push('Rethrow зберігає failure path вище. Це нормально, якщо верхній рівень справді бере відповідальність за logging або recovery.');
+        pills.push({ text: 'rethrow upward', cls: 'bad-pill' });
+        unhandled = cfg.caller !== 'promise-catch';
+      } else if (unhandled) {
+        add(steps, 4, 'unhandled rejection / uncaught error', 'bad');
+        pills.push({ text: 'unhandled path', cls: 'bad-pill' });
+      } else {
+        add(steps, 4, cfg.catch === 'swallow' ? 'error disappeared from outer visibility' : 'handled locally', cfg.catch === 'swallow' ? 'warn' : 'catch');
+      }
+
+      if (cfg.catch === 'swallow' && caughtLocally && cfg.rethrow === 'no') {
+        warnings.push('Тихий `.catch(() => {})` або порожній `catch` прибирає сигнал про реальний баг і ускладнює діагностику.');
+        pills.push({ text: 'error swallowed', cls: 'warn-pill' });
+      }
+      if (cfg.stack === 'gap') {
+        why.push('Після async boundary stack trace частіше виглядає як reconstructed logical chain, а не як безперервний фізичний стек.');
+      } else {
+        why.push('Без додаткових async gaps stack trace зазвичай простіший і ближчий до реального sync call chain.');
+      }
+      if (cfg.producer === 'promise-reject') {
+        why.push('`Promise.reject(...)` одразу створює rejected promise path, минаючи будь-який sync throw у caller frame.');
+      }
+      if (cfg.caller === 'no-handler') {
+        warnings.push('Код без локального handler покладається на глобальний unhandled path, а це вже запізніла стадія для recovery.');
+      }
+
+      codePreview.textContent = `${buildProducer(cfg)}\n\n${buildCaller(cfg)}\n\nmain();`;
+      verdict.innerHTML = pills.length
+        ? pills.map(p => `<span class="pill ${p.cls}">${p.text}</span>`).join('')
+        : '<span class="pill sync-pill">context-dependent</span>';
+      renderSteps(steps);
+      whyList.innerHTML = why.map(x => `<li>${x}</li>`).join('');
+      warningList.innerHTML = warnings.length
+        ? warnings.map(x => `<span class="pill warn-pill">${x}</span>`).join(' ')
+        : 'No extra warnings for this scenario.';
+    }
+
+    function reset() {
+      producerSelect.value = 'async-throw';
+      callerSelect.value = 'no-await-try';
+      rethrowSelect.value = 'no';
+      catchSelect.value = 'normal';
+      stackSelect.value = 'gap';
+      analyze();
+    }
+
+    document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
+      const p = presets[btn.dataset.preset];
+      producerSelect.value = p.producer;
+      callerSelect.value = p.caller;
+      rethrowSelect.value = p.rethrow;
+      catchSelect.value = p.catch;
+      stackSelect.value = p.stack;
+      analyze();
+    }));
+
+    analyzeBtn.addEventListener('click', analyze);
+    resetBtn.addEventListener('click', reset);
+    reset();
+  </script>
+</body>
+</html>
