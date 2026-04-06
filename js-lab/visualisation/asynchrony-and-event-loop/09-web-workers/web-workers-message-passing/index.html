@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Web Workers</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Web Workers</h2>
+    <p>Main thread vs worker thread with message passing</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">worker</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">Worker</span>(<span class="str">"worker.js"</span>);</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="var">worker</span>.<span class="fn">postMessage</span>({ <span class="var">type</span>: <span class="str">"parse"</span>, <span class="var">payload</span>: <span class="var">bigBlob</span> });</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="var">worker</span>.<span class="var">onmessage</span> <span class="op">=</span> ({ <span class="var">data</span> }) <span class="op">=&gt;</span> {</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  <span class="fn">render</span>(<span class="var">data</span>);</div>
+<div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>};</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Main Thread</div><div id="mainBox" class="lane"></div></div>
+<div class="panel-box"><div class="panel-title">Message Channel</div><div id="msgBox" class="lane"></div></div>
+<div class="panel-box"><div class="panel-title">Worker Thread</div><div id="workerBox" class="lane"></div></div>
+<div class="panel-box"><div class="panel-title">UI Responsiveness</div><div id="uiBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function renderLane(id, items) {
+      $(id).innerHTML = items.length ? items.map((item) => `<div class="lane-item">${item}</div>`).join('') : '<div class="queue-empty">idle</div>';
+    }
+    function workerState(mainItems, msgItems, workerItems, uiState, logs) {
+      renderLane('mainBox', mainItems);
+      renderLane('msgBox', msgItems);
+      renderLane('workerBox', workerItems);
+      setText('uiBox', uiState);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line1',
+  state: { stack: ['Main'], heap: ['Worker'] },
+  narration: {
+    title: 'Worker Created',
+    what: 'Main thread запускає окремий worker context.',
+    why: 'Це новий JS runtime на іншому thread, а не ще одна queue в тому ж stack.',
+    insight: 'Справжній виграш тут — вивести compute з main thread, а не просто “зробити асинхронно”.'
+  },
+  action: () => workerState(['create Worker'], [], ['boot worker runtime'], '<span class="status-pill ok">UI still responsive</span>', [])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Main'], heap: ['Worker', 'Message'] },
+  narration: {
+    title: 'Payload Sent to Worker',
+    what: 'Main thread відправляє heavy payload через postMessage.',
+    why: 'Комунікація йде message passing, а не через shared DOM objects.',
+    insight: 'Тут може бути суттєвий cost на structured clone або transfer.'
+  },
+  action: () => workerState(['postMessage(payload)'], ['message in transit'], ['waiting for message'], '<span class="status-pill ok">UI free from compute</span>', ['payload sent'])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Worker'], heap: ['Payload'] },
+  narration: {
+    title: 'Worker Computes Off Main Thread',
+    what: 'Worker отримує повідомлення і виконує heavy parsing паралельно до main thread.',
+    why: 'У worker свій event loop і свій stack.',
+    insight: 'Це той випадок, де responsiveness росте навіть якщо total wall-clock time майже не змінюється.'
+  },
+  action: () => workerState(['handle clicks / keep UI alive'], [], ['parse bigBlob', 'compute result'], '<span class="status-pill ok">main thread remains interactive</span>', ['payload sent'])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['Main'], heap: ['Result message'] },
+  narration: {
+    title: 'Result Returns to Main Thread',
+    what: 'Worker відправляє computed result назад через message channel.',
+    why: 'Main thread не ділить з worker-ом локальні змінні; він отримує новий message event.',
+    insight: 'Саме тому boundary між потоками треба проєктувати акуратно: менше chatter, чистіші payloads.'
+  },
+  action: () => workerState(['onmessage callback pending'], ['result in transit'], ['done'], '<span class="status-pill ok">UI still responsive</span>', ['payload sent', 'worker done'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['Main'], heap: ['Result'] },
+  narration: {
+    title: 'Main Thread Renders Result',
+    what: 'Готові дані повертаються в main thread лише на фінальному UI step.',
+    why: 'Worker не може напряму малювати DOM.',
+    insight: 'Правильний pattern: compute off-thread, commit on main thread.'
+  },
+  action: () => workerState(['render(data)'], [], ['idle'], '<span class="status-pill ok">best case: compute off-thread, UI on main</span>', ['payload sent', 'worker done', 'rendered result'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
