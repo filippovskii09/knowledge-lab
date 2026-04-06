@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Closure Retention</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .op { color: #56b6c2; }
+    .num { color: #d19a66; }
+    .str { color: #98c379; }
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .var { color: #e06c75; }
+    .com { color: #7f8c8d; font-style: italic; }
+
+    .visual-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 260px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .env,
+    .heap-card {
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      display: none;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.3s ease;
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      position: relative;
+    }
+
+    .env.visible,
+    .heap-card.visible {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .heap-card {
+      border-color: #9b59b6;
+      background: #faf5fb;
+    }
+
+    .collected {
+      opacity: 0.22 !important;
+      transform: scale(0.96);
+    }
+
+    .retained {
+      border-color: #27ae60 !important;
+      background: #eafaf1 !important;
+    }
+
+    .retained::after {
+      content: 'Retained by Closure';
+      position: absolute;
+      top: -10px;
+      right: 10px;
+      background: #27ae60;
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .record-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      font-family: monospace;
+      color: #8e44ad;
+    }
+
+    .env .record-title {
+      color: #2980b9;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 14px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-block;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #f4ecf7;
+      color: #8e44ad;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Closure Retention and Memory</h2>
+  <p>Покроково: зовнішня функція завершується, stack frame зникає, але lexical environment лишається reachable через inner function.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.1;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">createHandler</span>() {</div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">const</span> <span class="var">heavyData</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">Array</span>(<span class="num">100000</span>).<span class="fn">fill</span>(<span class="str">"x"</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="kw">return</span> <span class="kw">function</span> <span class="fn">onClick</span>() {</div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>    <span class="kw">return</span> <span class="var">heavyData</span>.length<span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  }<span class="op">;</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>}</div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="kw">const</span> <span class="var">handler</span> <span class="op">=</span> <span class="fn">createHandler</span>()<span class="op">;</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="com">// createHandler stack frame is gone</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="var">handler</span>()<span class="op">;</span></div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="visual-grid">
+        <div class="panel">
+          <div class="panel-title">Stack and Roots</div>
+          <div id="globalEnv" class="env visible">
+            <div class="record-title">Global Environment</div>
+            <div class="record-table">
+              <div>handler:</div><div id="valHandler" class="val-uninit">&lt;uninitialized&gt;</div>
+            </div>
+          </div>
+          <div id="functionEnv" class="env">
+            <div class="record-title">createHandler Environment</div>
+            <div class="record-table">
+              <div>heavyData:</div><div class="val-reference">&lt;ref: <span class="badge">0xHD1</span>&gt;</div>
+              <div>onClick:</div><div class="val-reference">&lt;ref: <span class="badge">0xFN9</span>&gt;</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Heap</div>
+          <div id="heapFunction" class="heap-card">
+            <div class="record-title">@0xFN9 (onClick function)</div>
+            <div class="record-table">
+              <div>[[Environment]]:</div><div class="val-reference">&lt;ref: createHandler Env&gt;</div>
+            </div>
+          </div>
+          <div id="heapData" class="heap-card">
+            <div class="record-title">@0xHD1 (heavyData)</div>
+            <div class="record-table">
+              <div>type:</div><div>Array(100000)</div>
+              <div>status:</div><div id="dataStatus">reachable</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function resetState() {
+      document.getElementById('functionEnv').className = 'env';
+      document.getElementById('heapFunction').className = 'heap-card';
+      document.getElementById('heapData').className = 'heap-card';
+      document.getElementById('dataStatus').innerText = 'reachable';
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3', 'line4', 'line5', 'line6'],
+          narration: {
+            title: 'Function Declaration',
+            what: 'Оголошено фабрику `createHandler`, яка створює великий масив і повертає inner function.',
+            why: 'Поки виклику ще не було, ніякого локального lexical environment із `heavyData` ще не існує.',
+            insight: 'Closure виникає не від самого факту оголошення функції, а від моменту створення inner function у конкретному виклику.'
+          },
+          action: () => {
+            document.getElementById('valHandler').innerText = '<uninitialized>';
+            document.getElementById('valHandler').className = 'val-uninit';
+            resetState();
+          }
+        },
+        {
+          codeLine: ['line2', 'line3', 'line8'],
+          narration: {
+            title: 'createHandler Invocation',
+            what: 'Створено локальне середовище `createHandler`, великий масив `heavyData` і function object `onClick`.',
+            why: 'Саме на цьому кроці inner function отримує посилання на зовнішнє lexical environment.',
+            insight: 'Closure це не окремий тип об’єкта. Це звичайна функція плюс reachable environment за нею.'
+          },
+          action: () => {
+            document.getElementById('functionEnv').className = 'env visible';
+            document.getElementById('heapFunction').className = 'heap-card visible';
+            document.getElementById('heapData').className = 'heap-card visible';
+          }
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: 'Return to Global Scope',
+            what: 'Повернена inner function записується в глобальну змінну `handler`.',
+            why: 'Тепер існує явний root -> function object -> environment chain.',
+            insight: 'Поки живе `handler`, живе і весь retained path за ним.'
+          },
+          action: () => {
+            document.getElementById('valHandler').innerHTML = '&lt;ref: <span class="badge">0xFN9</span>&gt;';
+            document.getElementById('valHandler').className = 'val-reference';
+            document.getElementById('functionEnv').className = 'env visible';
+            document.getElementById('heapFunction').className = 'heap-card visible retained';
+            document.getElementById('heapData').className = 'heap-card visible retained';
+            document.getElementById('dataStatus').innerText = 'retained by closure';
+          }
+        },
+        {
+          codeLine: 'line9',
+          narration: {
+            title: 'Outer Stack Frame Gone',
+            what: 'Call stack frame `createHandler` зник, але lexical environment не був зібраний.',
+            why: 'Зникнення stack frame не дорівнює зникненню даних. Потрібно, щоб на environment не лишилось reachable path.',
+            insight: 'Це ключова різниця між execution lifecycle і memory lifecycle.'
+          },
+          action: () => {
+            document.getElementById('functionEnv').className = 'env visible retained';
+            document.getElementById('heapFunction').className = 'heap-card visible retained';
+            document.getElementById('heapData').className = 'heap-card visible retained';
+          }
+        },
+        {
+          codeLine: 'line10',
+          narration: {
+            title: 'Inner Function Access',
+            what: '`handler()` успішно читає `heavyData.length`, хоча зовнішня функція вже завершилась.',
+            why: 'Доступ відбувається через closure link до збереженого lexical environment.',
+            insight: 'Якщо `heavyData` велике і вже не потрібне, саме тут починається ризик memory retention.'
+          },
+          action: () => {
+            document.getElementById('functionEnv').className = 'env visible retained';
+            document.getElementById('heapFunction').className = 'heap-card visible retained';
+            document.getElementById('heapData').className = 'heap-card visible retained';
+          }
+        },
+        {
+          codeLine: 'line10',
+          narration: {
+            title: 'GC Decision',
+            what: 'GC не може зібрати `heavyData`, бо до нього все ще можна дійти від global root через `handler`.',
+            why: 'Reachability перемагає інтуїцію "функція вже завершилась".',
+            insight: 'Щоб звільнити таку пам’ять, треба прибрати retained path: listener, timer, cache, global callback або сам function reference.'
+          },
+          action: () => {
+            document.getElementById('functionEnv').className = 'env visible retained';
+            document.getElementById('heapFunction').className = 'heap-card visible retained';
+            document.getElementById('heapData').className = 'heap-card visible retained';
+            document.getElementById('dataStatus').innerText = 'not collectible yet';
+          }
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
