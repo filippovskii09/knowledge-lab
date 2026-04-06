@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Async Error Handling</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Async Error Handling</h2>
+    <p>Why forgotten await breaks try/catch</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">async</span> <span class="kw">function</span> <span class="fn">save</span>() {</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">throw</span> <span class="kw">new</span> <span class="fn">Error</span>(<span class="str">"boom"</span>);</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>}</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="kw">async</span> <span class="kw">function</span> <span class="fn">main</span>() {</div>
+<div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  <span class="kw">try</span> {</div>
+<div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>    <span class="fn">save</span>();</div>
+<div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>    <span class="fn">console.log</span>(<span class="str">"after save"</span>);</div>
+<div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span>  } <span class="kw">catch</span> (err) {</div>
+<div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span>    <span class="fn">console.log</span>(<span class="str">"caught"</span>, err.message);</div>
+<div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span>  }</div>
+<div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span>}</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Current Frame</div><div id="frameBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Returned Promise</div><div id="promiseBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Catch Visibility</div><div id="catchBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Unhandled Rejection</div><div id="unhandledBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function errorState(frame, promiseState, catchState, unhandledState, logs) {
+      setText('frameBox', frame);
+      setText('promiseBox', promiseState);
+      setText('catchBox', catchState);
+      setText('unhandledBox', unhandledState);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line6',
+  state: { stack: ['main try block'], heap: ['Promise(save)'] },
+  narration: {
+    title: 'save() Called Without await',
+    what: 'main викликає async function save всередині try.',
+    why: 'На вигляд це схоже на sync throw-path, але семантика вже інша.',
+    insight: 'Ключова пастка: async function назовні поводиться як promise-returning function.'
+  },
+  action: () => errorState('<span class="status-pill neutral">main try block active</span>', '<span class="status-pill warn">save() promise created</span>', '<span class="status-pill warn">catch waiting for sync throw</span>', '<span class="status-pill neutral">none yet</span>', [])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['save()'], heap: ['Promise(save)'] },
+  narration: {
+    title: 'Throw Becomes Rejection',
+    what: 'throw всередині async function переводить її outer promise в rejected state.',
+    why: 'Для зовнішнього виклику це не synchronous throw into caller frame.',
+    insight: 'Rejected promise — інший шлях розповсюдження помилки, ніж поточний try/catch frame.'
+  },
+  action: () => errorState('<span class="status-pill neutral">save() frame finished</span>', '<span class="status-pill bad">rejected</span>', '<span class="status-pill warn">catch still saw no sync throw</span>', '<span class="status-pill neutral">not surfaced yet</span>', [])
+},
+{
+  codeLine: 'line7',
+  state: { stack: ['main try block'], heap: ['Promise(save)'] },
+  narration: {
+    title: 'Execution Continues in try Block',
+    what: 'Локальний try/catch не перехопив rejection, тому after save виконується.',
+    why: 'У поточний frame не прилетів synchronous exception.',
+    insight: 'Це найтиповіший symptom forgotten await.'
+  },
+  action: () => errorState('<span class="status-pill neutral">main continues</span>', '<span class="status-pill bad">rejected</span>', '<span class="status-pill bad">catch bypassed</span>', '<span class="status-pill neutral">pending observation</span>', ['after save'])
+},
+{
+  codeLine: 'line8',
+  state: { stack: ['main finished'], heap: ['Promise(save)'] },
+  narration: {
+    title: 'Catch Never Runs',
+    what: 'main виходить з try/catch без обробки rejected promise.',
+    why: 'Ніхто не await-нув і не `.catch()`-нув save().',
+    insight: 'Без явної обробки promise chain runtime побачить unhandled rejection.'
+  },
+  action: () => errorState('<span class="status-pill neutral">main done</span>', '<span class="status-pill bad">rejected</span>', '<span class="status-pill bad">catch missed the error</span>', '<span class="status-pill warn">possible unhandled rejection</span>', ['after save'])
+},
+{
+  codeLine: 'line6',
+  state: { stack: [], heap: ['Promise(save)'] },
+  narration: {
+    title: 'Unhandled Rejection Surfaces',
+    what: 'Runtime сигналізує про promise без обробника.',
+    why: 'Rejected promise залишився поза будь-яким recovery path.',
+    insight: 'Фікс тут не “ще один catch десь колись”, а коректна boundary model: `await save()` або explicit promise handling.'
+  },
+  action: () => errorState('<span class="status-pill neutral">idle</span>', '<span class="status-pill bad">rejected without handler</span>', '<span class="status-pill bad">never entered</span>', '<span class="status-pill bad">unhandled rejection</span>', ['after save', 'UnhandledPromiseRejection'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
