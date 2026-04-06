@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Memory Profiling Workflow</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .op { color: #56b6c2; }
+    .num { color: #d19a66; }
+    .str { color: #98c379; }
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .var { color: #e06c75; }
+    .com { color: #7f8c8d; font-style: italic; }
+
+    .workflow-wrap {
+      display: grid;
+      grid-template-columns: 1.15fr 1.55fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .devtools-panel {
+      background: #242424;
+      border-radius: 8px;
+      border: 1px solid #444;
+      color: #ccc;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 300px;
+    }
+
+    .dt-header {
+      background: #333;
+      padding: 8px 12px;
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      border-bottom: 1px solid #444;
+    }
+
+    .dt-tab {
+      padding: 4px 8px;
+      border-radius: 4px;
+      background: #2b2b2b;
+    }
+
+    .dt-tab.active {
+      background: #555;
+      color: white;
+    }
+
+    .dt-body {
+      padding: 12px;
+      flex: 1;
+      overflow: auto;
+    }
+
+    .stage-list {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .stage {
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 8px 10px;
+      opacity: 0.35;
+      transition: opacity 0.25s, border-color 0.25s, background 0.25s;
+      background: #1f1f1f;
+    }
+
+    .stage.visible {
+      opacity: 1;
+    }
+
+    .stage.active {
+      border-color: #0fb9b1;
+      background: #152626;
+    }
+
+    .stage-title {
+      font-weight: bold;
+      color: #f7d794;
+      margin-bottom: 4px;
+    }
+
+    .snapshot-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      display: none;
+    }
+
+    .snapshot-table.visible {
+      display: table;
+    }
+
+    .snapshot-table th,
+    .snapshot-table td {
+      text-align: left;
+      padding: 5px 8px;
+      border-bottom: 1px solid #333;
+    }
+
+    .snapshot-table th {
+      color: #999;
+    }
+
+    .retainer-box {
+      display: none;
+      margin-top: 12px;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 10px;
+      background: #1a1a1a;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .retainer-box.visible {
+      display: block;
+    }
+
+    .timeline {
+      display: none;
+      align-items: flex-end;
+      gap: 4px;
+      height: 120px;
+      border-left: 1px solid #444;
+      border-bottom: 1px solid #444;
+      padding: 6px 0 0 8px;
+      margin-top: 12px;
+      position: relative;
+    }
+
+    .timeline.visible {
+      display: flex;
+    }
+
+    .bar {
+      width: 18px;
+      background: #00bcd4;
+      border-top: 2px solid #0097a7;
+      transition: height 0.25s;
+    }
+
+    .bar.gc {
+      background: #ffc107;
+      border-top-color: #ff9800;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: bold;
+    }
+
+    .tag.good {
+      background: #1f5f39;
+      color: #d5f5e3;
+    }
+
+    .tag.bad {
+      background: #6b1e1e;
+      color: #fadbd8;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Memory Profiling Workflow</h2>
+  <p>Послідовність дій у DevTools: baseline, reproduce, compare, retained path, patch, verify.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="workflow-wrap">
+    <div class="js-lab-code">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="com">// Profiling workflow</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="com">// 1. Take baseline snapshot</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="com">// 2. Reproduce leak scenario</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="com">// 3. Take second snapshot</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="com">// 4. Compare diff</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="com">// 5. Inspect retained path</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">window</span>.<span class="var">modalHandlers</span> <span class="op">=</span> [<span class="var">handler</span>]<span class="op">;</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="com">// 6. Patch cleanup and re-run</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="kw">window</span>.<span class="var">modalHandlers</span> <span class="op">=</span> []<span class="op">;</span></div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="devtools-panel">
+        <div class="dt-header">
+          <div class="dt-tab active">Memory</div>
+          <div class="dt-tab">Performance</div>
+          <div class="dt-tab">Profiler</div>
+        </div>
+        <div class="dt-body">
+          <div class="stage-list">
+            <div id="stage1" class="stage visible">
+              <div class="stage-title">1. Baseline Snapshot</div>
+              <div>Зафіксувати чистий стан пам'яті до сценарію.</div>
+            </div>
+            <div id="stage2" class="stage">
+              <div class="stage-title">2. Reproduce</div>
+              <div>Кілька разів повторити дію, яка підозрюється у leak.</div>
+            </div>
+            <div id="stage3" class="stage">
+              <div class="stage-title">3. Compare Diff</div>
+              <div>Шукати не просто великі об'єкти, а ті, що не зникли.</div>
+            </div>
+            <div id="stage4" class="stage">
+              <div class="stage-title">4. Inspect Retainers</div>
+              <div>Знайти, хто саме тримає об'єкт живим.</div>
+            </div>
+            <div id="stage5" class="stage">
+              <div class="stage-title">5. Verify Fix</div>
+              <div>Повторити той самий сценарій і перевірити, що survivor object зник.</div>
+            </div>
+          </div>
+
+          <table id="snapshotTable" class="snapshot-table">
+            <thead>
+              <tr>
+                <th>Constructor</th>
+                <th>Count Δ</th>
+                <th>Retained Size</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Detached HTMLDivElement</td>
+                <td>+5</td>
+                <td>8.4 MB</td>
+                <td><span class="tag bad">Suspicious</span></td>
+              </tr>
+              <tr>
+                <td>Array</td>
+                <td>+1</td>
+                <td>96 B</td>
+                <td><span class="tag bad">Retainer</span></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div id="retainerBox" class="retainer-box">
+window
+  -> modalHandlers
+    -> handler closure
+      -> detached modal DOM node
+          </div>
+
+          <div id="timeline" class="timeline">
+            <div class="bar" style="height: 28%;"></div>
+            <div class="bar" style="height: 42%;"></div>
+            <div class="bar" style="height: 60%;"></div>
+            <div class="bar gc" style="height: 34%;"></div>
+            <div class="bar" style="height: 66%;"></div>
+            <div class="bar" style="height: 82%;"></div>
+            <div class="bar gc" style="height: 40%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function setActiveStage(id) {
+      ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'].forEach((stageId) => {
+        const el = document.getElementById(stageId);
+        el.classList.remove('active');
+        if (stageId !== 'stage1') {
+          el.classList.remove('visible');
+        }
+      });
+      for (const stageId of ['stage1', 'stage2', 'stage3', 'stage4', 'stage5']) {
+        const el = document.getElementById(stageId);
+        el.classList.add('visible');
+        if (stageId === id) break;
+      }
+      document.getElementById(id).classList.add('active');
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2'],
+          narration: {
+            title: 'Baseline First',
+            what: 'Перший крок це baseline snapshot до будь-яких підозрілих дій.',
+            why: 'Без чистої контрольної точки ви не зможете довести, що нові survivor objects справді з’явилися через конкретний сценарій.',
+            insight: 'Починати з "подивлюсь, що велике в heap зараз" майже завжди слабша стратегія, ніж працювати через диф і відтворюваний сценарій.'
+          },
+          action: () => {
+            setActiveStage('stage1');
+            document.getElementById('snapshotTable').classList.remove('visible');
+            document.getElementById('retainerBox').classList.remove('visible');
+            document.getElementById('timeline').classList.remove('visible');
+          }
+        },
+        {
+          codeLine: 'line3',
+          narration: {
+            title: 'Reproduce the Scenario',
+            what: 'Тепер треба кілька разів повторити дію, яка ймовірно створює leak або надмірні алокації.',
+            why: 'Один випадковий клік часто не дає достатнього сигналу. Повторення робить шум меншим, а патерн видимішим.',
+            insight: 'Добрий profiling workflow починається не з інструмента, а з відтворюваного сценарію.'
+          },
+          action: () => {
+            setActiveStage('stage2');
+            document.getElementById('timeline').classList.add('visible');
+            document.getElementById('snapshotTable').classList.remove('visible');
+            document.getElementById('retainerBox').classList.remove('visible');
+          }
+        },
+        {
+          codeLine: ['line4', 'line5'],
+          narration: {
+            title: 'Compare Snapshot Diff',
+            what: 'Після сценарію знімається другий snapshot і порівнюється diff.',
+            why: 'Нас цікавлять об’єкти, які мали б зникнути після cleanup, але продовжують накопичуватися.',
+            insight: 'Шукайте не найбільший об’єкт у вакуумі, а невиправданого survivor object після завершення сценарію.'
+          },
+          action: () => {
+            setActiveStage('stage3');
+            document.getElementById('snapshotTable').classList.add('visible');
+            document.getElementById('retainerBox').classList.remove('visible');
+            document.getElementById('timeline').classList.remove('visible');
+          }
+        },
+        {
+          codeLine: ['line6', 'line7'],
+          narration: {
+            title: 'Inspect Retained Path',
+            what: 'Diff показав survivor object. Наступний крок це retainer chain: хто саме утримує його живим.',
+            why: 'Leak майже ніколи не виправляють "видаленням великого об’єкта". Потрібно знайти шлях від GC root до нього.',
+            insight: 'Retained path це найцінніша відповідь профайлера. Саме вона конвертує heap snapshot у конкретну інженерну правку.'
+          },
+          action: () => {
+            setActiveStage('stage4');
+            document.getElementById('snapshotTable').classList.add('visible');
+            document.getElementById('retainerBox').classList.add('visible');
+            document.getElementById('timeline').classList.remove('visible');
+          }
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: 'Patch Ownership or Cleanup',
+            what: 'Після знаходження retained path треба змінити ownership даних: cleanup, cache lifetime або global reference.',
+            why: 'Проблема тут не в DOM-вузлі як такому, а в тому, що `window.modalHandlers` продовжує бути strong root для closure і detached node.',
+            insight: 'Більшість memory fixes це правка lifetime і ownership, а не "оптимізація GC".'
+          },
+          action: () => {
+            setActiveStage('stage5');
+            document.getElementById('snapshotTable').classList.add('visible');
+            document.getElementById('retainerBox').classList.add('visible');
+          }
+        },
+        {
+          codeLine: 'line9',
+          narration: {
+            title: 'Verify the Same Way You Measured',
+            what: 'Після правки треба знову повторити той самий сценарій і переконатися, що survivor object більше не з’являється.',
+            why: 'Без повторного заміру ви маєте лише припущення, а не доказ виправлення.',
+            insight: 'Профілювання завершується не тоді, коли ви придумали гіпотезу, а тоді, коли однаковий workflow перестав показувати проблему.'
+          },
+          action: () => {
+            setActiveStage('stage5');
+            document.getElementById('snapshotTable').classList.add('visible');
+            document.getElementById('retainerBox').classList.remove('visible');
+            document.getElementById('timeline').classList.add('visible');
+          }
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
