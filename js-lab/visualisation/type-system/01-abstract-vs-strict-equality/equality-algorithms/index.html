@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Equality Algorithms Matrix</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .str { color: #98c379; }
+
+    .matrix {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: monospace;
+      background: #fff;
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .matrix th,
+    .matrix td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e6e6e6;
+      text-align: left;
+    }
+
+    .matrix th {
+      background: #f8fafc;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+
+    .row-active {
+      background: #fff8e8;
+    }
+
+    .truthy {
+      color: #1b7f3b;
+      font-weight: bold;
+    }
+
+    .falsy {
+      color: #c0392b;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>=== vs Object.is vs SameValueZero</h2>
+  <p>Покроково: як три різні алгоритми рівності поводяться на найважливіших edge cases.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.02;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="fn">NaN</span> <span class="op">===</span> <span class="fn">NaN</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="fn">Object</span>.<span class="fn">is</span>(<span class="fn">NaN</span>, <span class="fn">NaN</span>)</div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>[<span class="fn">NaN</span>].<span class="fn">includes</span>(<span class="fn">NaN</span>)</div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="num">+0</span> <span class="op">===</span> <span class="op">-</span><span class="num">0</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="fn">Object</span>.<span class="fn">is</span>(<span class="num">+0</span>, <span class="op">-</span><span class="num">0</span>)</div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>[<span class="num">+0</span>].<span class="fn">includes</span>(<span class="op">-</span><span class="num">0</span>)</div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="kw">const</span> <span class="var">a</span> <span class="op">=</span> {}<span class="op">;</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="kw">const</span> <span class="var">b</span> <span class="op">=</span> {}<span class="op">;</span></div>
+      <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span><span class="var">a</span> <span class="op">===</span> <span class="var">b</span></div>
+    </div>
+
+    <div style="flex: 1.38; display: flex; flex-direction: column; gap: 16px;">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th>Case</th>
+            <th>`===`</th>
+            <th>`Object.is`</th>
+            <th>`SameValueZero`</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr id="row1">
+            <td>`NaN` vs `NaN`</td>
+            <td id="r1c1">-</td>
+            <td id="r1c2">-</td>
+            <td id="r1c3">-</td>
+          </tr>
+          <tr id="row2">
+            <td>`+0` vs `-0`</td>
+            <td id="r2c1">-</td>
+            <td id="r2c2">-</td>
+            <td id="r2c3">-</td>
+          </tr>
+          <tr id="row3">
+            <td>`{}` vs `{}`</td>
+            <td id="r3c1">-</td>
+            <td id="r3c2">-</td>
+            <td id="r3c3">-</td>
+          </tr>
+          <tr id="row4">
+            <td>`ref` vs same `ref`</td>
+            <td id="r4c1">-</td>
+            <td id="r4c2">-</td>
+            <td id="r4c3">-</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function clearRows() {
+      ['row1', 'row2', 'row3', 'row4'].forEach((id) => {
+        document.getElementById(id).className = '';
+      });
+    }
+
+    function setCell(id, value) {
+      const el = document.getElementById(id);
+      el.textContent = value;
+      el.className = value === 'true' ? 'truthy' : value === 'false' ? 'falsy' : '';
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3'],
+          narration: {
+            title: 'NaN Case',
+            what: 'Порівнюємо `NaN` із самим собою в трьох different equality models.',
+            why: '`===` наслідує numeric rules, де `NaN` не дорівнює навіть собі. `Object.is` і `SameValueZero` поводяться інакше.',
+            insight: 'Тому `includes(NaN)` працює так, як інтуїтивно очікує більшість розробників, а `indexOf(NaN)` історично ламав цю інтуїцію.'
+          },
+          action: () => {
+            clearRows();
+            document.getElementById('row1').className = 'row-active';
+            setCell('r1c1', 'false');
+            setCell('r1c2', 'true');
+            setCell('r1c3', 'true');
+          }
+        },
+        {
+          codeLine: ['line5', 'line6', 'line7'],
+          narration: {
+            title: 'Signed Zero Case',
+            what: 'Тепер дивимось на `+0` і `-0`.',
+            why: '`===` і `SameValueZero` не розрізняють signed zero, а `Object.is()` розрізняє.',
+            insight: 'Якщо для вас знак нуля важливий, наприклад у low-level math logic, `Object.is()` є точнішим інструментом.'
+          },
+          action: () => {
+            clearRows();
+            document.getElementById('row2').className = 'row-active';
+            setCell('r2c1', 'true');
+            setCell('r2c2', 'false');
+            setCell('r2c3', 'true');
+          }
+        },
+        {
+          codeLine: ['line9', 'line10', 'line11'],
+          narration: {
+            title: 'Different Object References',
+            what: 'Два окремо створені objects лишаються різними для всіх трьох алгоритмів.',
+            why: 'Тут питання не в coercion і не в numeric edge cases, а в reference identity.',
+            insight: 'Жоден з цих алгоритмів не робить structural equality для objects.'
+          },
+          action: () => {
+            clearRows();
+            document.getElementById('row3').className = 'row-active';
+            setCell('r3c1', 'false');
+            setCell('r3c2', 'false');
+            setCell('r3c3', 'false');
+          }
+        },
+        {
+          codeLine: 'line11',
+          narration: {
+            title: 'Same Reference',
+            what: 'Якщо порівнювати одну й ту саму object reference із собою, всі три алгоритми дають `true`.',
+            why: 'У звичайному object case вони сходяться: одна й та сама identity означає рівність.',
+            insight: 'Реальні розбіжності між алгоритмами починаються не на objects загалом, а на numeric edge cases.'
+          },
+          action: () => {
+            clearRows();
+            document.getElementById('row4').className = 'row-active';
+            setCell('r4c1', 'true');
+            setCell('r4c2', 'true');
+            setCell('r4c3', 'true');
+          }
+        },
+        {
+          codeLine: ['line1', 'line5', 'line11'],
+          narration: {
+            title: 'Choosing the Right Equality Model',
+            what: 'Матриця зводить три equality models в одну картину: `===`, `Object.is()` і `SameValueZero`.',
+            why: 'Їх не треба вчити як "одне краще за інше". Їх треба вчити як різні інструменти для різних semantics.',
+            insight: 'Практичне правило: `===` як default, `Object.is()` для `NaN`/signed zero semantics, `SameValueZero` для collection-like membership.'
+          },
+          action: () => {
+            clearRows();
+            ['row1', 'row2', 'row3', 'row4'].forEach((id) => {
+              document.getElementById(id).className = 'row-active';
+            });
+            setCell('r1c1', 'false');
+            setCell('r1c2', 'true');
+            setCell('r1c3', 'true');
+            setCell('r2c1', 'true');
+            setCell('r2c2', 'false');
+            setCell('r2c3', 'true');
+            setCell('r3c1', 'false');
+            setCell('r3c2', 'false');
+            setCell('r3c3', 'false');
+            setCell('r4c1', 'true');
+            setCell('r4c2', 'true');
+            setCell('r4c3', 'true');
+          }
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
