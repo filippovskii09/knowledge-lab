@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Bytecode Stepper Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>.board{display:grid;grid-template-columns:340px 1fr;gap:20px;flex:1;min-height:0}.panel{background:#fff;border:2px solid var(--color-border);border-radius:8px;padding:16px;overflow:auto}.section-title{margin:0 0 12px 0;color:var(--color-stack);font-size:15px;font-weight:700;text-transform:uppercase}.code-preview{background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:14px;font-family:Consolas, monospace;white-space:pre-wrap}.pill-list{display:flex;flex-wrap:wrap;gap:8px}.pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#e8eef5;color:#415a77;font-family:Consolas, monospace;font-size:13px;font-weight:700}.explain-list{margin:0;padding-left:20px}@media (max-width:960px){.board{grid-template-columns:1fr}}</style>
+</head>
+<body>
+<div class="js-lab-header"><h2>Bytecode Stepper Board</h2><p>Навчальна схема: як interpreter читає instruction stream</p></div>
+<div class="js-lab-app"><div class="board"><div class="panel"><h3 class="section-title">Source</h3><div class="code-preview">function sum(a, b) {
+  return a + b;
+}</div></div><div class="panel"><h3 class="section-title">Stepper</h3><div id="trace" class="code-preview"></div><div id="pills" class="pill-list"></div><ol id="explain" class="explain-list"></ol></div></div></div>
+<script type="module">
+import { JSLabEngine } from '../../../core/engine.js'; void JSLabEngine;
+document.getElementById('trace').textContent=`LOAD a
+LOAD b
+ADD
+RETURN`;
+document.getElementById('pills').innerHTML=['instruction stream','dispatch','execution state'].map(x=>`<span class="pill">${x}</span>`).join('');
+document.getElementById('explain').innerHTML=['Це навчальна модель, а не обіцянка конкретних V8 opcodes.','Interpreter читає інструкцію, виконує дію і переходить до наступної.','Bytecode дає execution-friendly representation без негайної native compilation.'].map(x=>`<li>${x}</li>`).join('');
+</script>
+</body>
+</html>
