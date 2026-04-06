@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Shadowing Lookup</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .var { color: #e06c75; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 230px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Shadowing Lookup</h2>
+  <p>Покроково: own property зупиняє lookup раніше і затіняє prototype property того ж імені.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex:1.05;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">parent</span> <span class="op">=</span> { <span class="var">value</span>: <span class="num">10</span> }<span class="op">;</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">child</span> <span class="op">=</span> <span class="fn">Object</span>.<span class="fn">create</span>(<span class="var">parent</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="var">child</span>.<span class="var">value</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="var">child</span>.<span class="var">value</span> <span class="op">=</span> <span class="num">20</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="var">child</span>.<span class="var">value</span><span class="op">;</span></div>
+    </div>
+
+    <div style="flex:1.35;display:flex;flex-direction:column;gap:16px;">
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-title">Objects</div>
+          <div class="card">
+            <div class="record-table">
+              <div>parent.value:</div><div id="parentValue">10</div>
+              <div>child own value:</div><div id="childValue">absent</div>
+              <div>lookup result:</div><div id="lookupResult">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Lookup Path</div>
+          <div class="card">
+            <div class="record-table">
+              <div>step 1:</div><div id="stepOwn">-</div>
+              <div>step 2:</div><div id="stepProto">-</div>
+              <div>effect:</div><div id="effect">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height:none;min-height:180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Дія (What):</span><span class="js-lab-log-content" id="log-what"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Причина (Why):</span><span class="js-lab-log-content" id="log-why"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Висновок:</span><span class="js-lab-log-content" id="log-insight" style="color:var(--log-accent);font-weight:bold;"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+    function paint(state) {
+      document.getElementById('parentValue').textContent = state.parentValue;
+      document.getElementById('childValue').textContent = state.childValue;
+      document.getElementById('lookupResult').textContent = state.lookupResult;
+      document.getElementById('stepOwn').textContent = state.stepOwn;
+      document.getElementById('stepProto').textContent = state.stepProto;
+      document.getElementById('effect').textContent = state.effect;
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2'],
+          narration: {
+            title: 'Prototype Link Ready',
+            what: 'Створено `child`, який делегує в `parent` через prototype link.',
+            why: 'Поки own property `value` на child відсутня, lookup може піти в parent.',
+            insight: 'Shadowing ще не сталося — є лише delegation path.'
+          },
+          action: () => paint({
+            parentValue: '10',
+            childValue: 'absent',
+            lookupResult: '-',
+            stepOwn: 'child has no own "value"',
+            stepProto: 'parent available as prototype',
+            effect: 'delegation possible'
+          })
+        },
+        {
+          codeLine: 'line3',
+          narration: {
+            title: 'Lookup Before Shadowing',
+            what: 'Перше читання `child.value` не знаходить own property і підіймається в `parent`.',
+            why: 'Так працює `[[Get]]`: own property first, prototype next.',
+            insight: 'На цьому етапі child не має власного `value`, він лише делегує lookup.'
+          },
+          action: () => paint({
+            parentValue: '10',
+            childValue: 'absent',
+            lookupResult: '10',
+            stepOwn: 'miss',
+            stepProto: 'parent.value found',
+            effect: 'value comes from prototype'
+          })
+        },
+        {
+          codeLine: 'line4',
+          narration: {
+            title: 'Assignment Creates Own Property',
+            what: 'Присвоєння `child.value = 20` створює own property на child.',
+            why: 'Тепер lookup більше не мусить іти в prototype для цього імені.',
+            insight: 'Це shadowing, а не mutation `parent.value`.'
+          },
+          action: () => paint({
+            parentValue: '10',
+            childValue: '20',
+            lookupResult: '-',
+            stepOwn: 'child now has own "value"',
+            stepProto: 'prototype still keeps 10',
+            effect: 'shadowing created'
+          })
+        },
+        {
+          codeLine: 'line5',
+          narration: {
+            title: 'Lookup After Shadowing',
+            what: 'Тепер `child.value` зупиняється на own property і вже не читає prototype value.',
+            why: 'Own property має пріоритет над prototype property того ж імені.',
+            insight: 'Parent value не зникло — воно просто перестало брати участь у цьому lookup.'
+          },
+          action: () => paint({
+            parentValue: '10',
+            childValue: '20',
+            lookupResult: '20',
+            stepOwn: 'hit on child',
+            stepProto: 'not reached',
+            effect: 'prototype value shadowed'
+          })
+        },
+        {
+          codeLine: ['line3', 'line4', 'line5'],
+          narration: {
+            title: 'Shadowing Summary',
+            what: 'Візуалізатор показує різницю між lookup before shadowing і lookup after shadowing.',
+            why: 'Саме ця різниця часто плутається з mutation bug, хоча механізм інший.',
+            insight: 'Практичне правило: якщо parent value лишився старим, а child читає нове — це майже напевно shadowing.'
+          },
+          action: () => paint({
+            parentValue: '10',
+            childValue: '20',
+            lookupResult: '20 on child / 10 on parent',
+            stepOwn: 'own property wins',
+            stepProto: 'prototype still intact',
+            effect: 'lookup path changed, parent unchanged'
+          })
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
