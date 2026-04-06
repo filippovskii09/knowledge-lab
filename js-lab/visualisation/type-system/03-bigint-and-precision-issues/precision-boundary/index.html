@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Number Precision Boundary vs BigInt</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .var { color: #e06c75; }
+    .com { color: #7f8c8d; font-style: italic; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 220px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .value-card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .value-card.warn {
+      border-color: #e67e22;
+      background: #fff4e6;
+    }
+
+    .value-card.safe {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Number Precision Boundary vs BigInt</h2>
+  <p>Покроково: де `Number` перестає безпечно розрізняти сусідні цілі значення і що тут змінює `BigInt`.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.05;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">max</span> <span class="op">=</span> <span class="fn">Number</span>.<span class="var">MAX_SAFE_INTEGER</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">a</span> <span class="op">=</span> <span class="var">max</span> <span class="op">+</span> <span class="num">1</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">const</span> <span class="var">b</span> <span class="op">=</span> <span class="var">max</span> <span class="op">+</span> <span class="num">2</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="var">a</span> <span class="op">===</span> <span class="var">b</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="kw">const</span> <span class="var">bigA</span> <span class="op">=</span> <span class="num">9007199254740992n</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">const</span> <span class="var">bigB</span> <span class="op">=</span> <span class="num">9007199254740993n</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="var">bigA</span> <span class="op">===</span> <span class="var">bigB</span><span class="op">;</span></div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-title">Number World</div>
+          <div id="numCard" class="value-card">
+            <div class="record-table">
+              <div>max:</div><div id="numMax">-</div>
+              <div>a:</div><div id="numA">-</div>
+              <div>b:</div><div id="numB">-</div>
+              <div>a === b:</div><div id="numEq">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">BigInt World</div>
+          <div id="bigCard" class="value-card">
+            <div class="record-table">
+              <div>bigA:</div><div id="bigA">-</div>
+              <div>bigB:</div><div id="bigB">-</div>
+              <div>bigA === bigB:</div><div id="bigEq">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function paint(numberState, bigintState, mode) {
+      document.getElementById('numMax').innerText = numberState.max;
+      document.getElementById('numA').innerText = numberState.a;
+      document.getElementById('numB').innerText = numberState.b;
+      document.getElementById('numEq').innerText = numberState.eq;
+      document.getElementById('bigA').innerText = bigintState.a;
+      document.getElementById('bigB').innerText = bigintState.b;
+      document.getElementById('bigEq').innerText = bigintState.eq;
+      document.getElementById('numCard').className = `value-card ${mode === 'warn' ? 'warn' : ''}`.trim();
+      document.getElementById('bigCard').className = `value-card ${mode === 'safe' ? 'safe' : ''}`.trim();
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: 'line1',
+          narration: {
+            title: 'Safe Integer Ceiling',
+            what: 'Беремо `Number.MAX_SAFE_INTEGER` як останнє ціле значення з гарантовано точною integer identity.',
+            why: 'Після цієї межі `Number` вже не гарантує коректне розрізнення сусідніх цілих значень.',
+            insight: 'Проблема починається не там, де число "виглядає дивно", а там, де ви втрачаєте надійність integer arithmetic.'
+          },
+          action: () => paint(
+            { max: '9007199254740991', a: '-', b: '-', eq: '-' },
+            { a: '-', b: '-', eq: '-' },
+            ''
+          )
+        },
+        {
+          codeLine: ['line2', 'line3'],
+          narration: {
+            title: 'Two Neighboring Integers Beyond Boundary',
+            what: 'Обчислюємо `max + 1` і `max + 2` у світі `Number`.',
+            why: 'Саме тут починається precision collapse: движок уже не може точно зберегти різницю між сусідніми integer values.',
+            insight: 'Для id, counters і sequence numbers це не "маленька похибка", а потенційна логічна поломка.'
+          },
+          action: () => paint(
+            { max: '9007199254740991', a: '9007199254740992', b: '9007199254740992', eq: '-' },
+            { a: '-', b: '-', eq: '-' },
+            'warn'
+          )
+        },
+        {
+          codeLine: 'line4',
+          narration: {
+            title: 'Equality Becomes Unreliable',
+            what: 'Порівняння `a === b` дає `true`, хоча математично це мали бути різні цілі значення.',
+            why: 'Проблема не в equality operator, а в тому, що обидва значення вже представлені як одна й та сама неточна `Number` величина.',
+            insight: 'Це класичний сигнал, що домен вийшов за safe integer range.'
+          },
+          action: () => paint(
+            { max: '9007199254740991', a: '9007199254740992', b: '9007199254740992', eq: 'true' },
+            { a: '-', b: '-', eq: '-' },
+            'warn'
+          )
+        },
+        {
+          codeLine: ['line6', 'line7'],
+          narration: {
+            title: 'BigInt Stores Exact Integers',
+            what: 'Тепер ті самі великі цілі значення створюються як `BigInt`.',
+            why: '`BigInt` не покладається на ту саму floating-point integer boundary, що і `Number`.',
+            insight: 'Це окремий numeric world із точними цілими, а не просто "більш точний Number".'
+          },
+          action: () => paint(
+            { max: '9007199254740991', a: '9007199254740992', b: '9007199254740992', eq: 'true' },
+            { a: '9007199254740992n', b: '9007199254740993n', eq: '-' },
+            'safe'
+          )
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: 'BigInt Preserves Integer Identity',
+            what: 'У `BigInt` порівняння зберігає реальну різницю між великими цілими: `bigA === bigB` дає `false`.',
+            why: 'Тут уже немає precision collapse на межі safe integers.',
+            insight: 'Висновок простий: якщо домен — великі цілі, краще міняти numeric model раніше, ніж ловити логічні баги пізніше.'
+          },
+          action: () => paint(
+            { max: '9007199254740991', a: '9007199254740992', b: '9007199254740992', eq: 'true' },
+            { a: '9007199254740992n', b: '9007199254740993n', eq: 'false' },
+            'safe'
+          )
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
