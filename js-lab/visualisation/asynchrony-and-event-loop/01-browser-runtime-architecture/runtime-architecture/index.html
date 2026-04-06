@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Browser Runtime Architecture</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Browser Runtime Architecture</h2>
+    <p>Stack + Web APIs + queues + render opportunity</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="fn">console.log</span>(<span class="str">"A"</span>);</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="fn">setTimeout</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"timeout"</span>), <span class="val-num">0</span>);</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="fn">Promise.resolve</span>().<span class="fn">then</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"promise"</span>));</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="fn">console.log</span>(<span class="str">"B"</span>);</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Call Stack</div><div id="stackBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Web APIs</div><div id="webApiBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Microtask Queue</div><div id="microtaskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Task Queue</div><div id="taskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Render Status</div><div id="renderBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function runtimeState(stack, webApi, microtasks, tasks, renderState, logs) {
+      setText('stackBox', stack);
+      renderList('webApiBox', webApi);
+      renderList('microtaskBox', microtasks);
+      renderList('taskBox', tasks);
+      setText('renderBox', renderState);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line1',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Sync Start',
+    what: 'Синхронний лог виконується прямо в поточному Global task.',
+    why: 'Поки код у стеку, ніякі callbacks ще не можуть стартувати.',
+    insight: 'Event loop нічого не “підмішує” всередину поточного sync execution.'
+  },
+  action: () => runtimeState('<span class="status-pill neutral">Global Task: console.log("A")</span>', [], [], [], '<span class="status-pill warn">paint waits</span>', ['A'])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Timer Registered',
+    what: 'setTimeout лише реєструє timer у Web API layer.',
+    why: 'Callback не переходить у стек і ще не готовий до запуску.',
+    insight: '“0 ms” не означає “run now”; це лише minimum delay before readiness.'
+  },
+  action: () => runtimeState('<span class="status-pill neutral">Global Task</span>', ['timer(timeout)'], [], [], '<span class="status-pill warn">paint waits</span>', ['A'])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['Global'], heap: ['Promise'] },
+  narration: {
+    title: 'Promise Reaction Queued',
+    what: 'Promise continuation потрапляє в microtask queue.',
+    why: 'Promise reaction jobs мають окрему high-priority чергу.',
+    insight: 'Саме тут народжується порядок: promise before timeout.'
+  },
+  action: () => runtimeState('<span class="status-pill neutral">Global Task</span>', ['timer(timeout)'], ['promise callback'], [], '<span class="status-pill warn">paint waits</span>', ['A'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Sync End',
+    what: 'Останній sync log завершує поточний script task.',
+    why: 'Лише після спорожнення stack runtime зможе перейти до queue handling.',
+    insight: 'Більшість order-bugs ламаються або виправляються саме в цій boundary.'
+  },
+  action: () => runtimeState('<span class="status-pill neutral">Global Task завершився</span>', ['timer(timeout)'], ['promise callback'], ['timeout callback ready'], '<span class="status-pill warn">render not yet</span>', ['A', 'B'])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['Promise Job'], heap: [] },
+  narration: {
+    title: 'Microtask Drain',
+    what: 'Event loop дренує microtask queue до взяття наступного task.',
+    why: 'Microtasks мають пріоритет над task queue.',
+    insight: 'Поки microtask queue не порожня, browser не піде до timeout callback.'
+  },
+  action: () => runtimeState('<span class="status-pill ok">Microtask: promise callback</span>', [], ['promise callback'], ['timeout callback ready'], '<span class="status-pill warn">render still waits</span>', ['A', 'B', 'promise'])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Timer Task'], heap: [] },
+  narration: {
+    title: 'Next Task Runs',
+    what: 'Лише тепер runtime бере timer callback як окремий task.',
+    why: 'Microtasks уже спорожніли, тому loop може перейти до task queue.',
+    insight: 'Це і є реальна відповідь на питання “чому Promise.then швидший за setTimeout”.'
+  },
+  action: () => runtimeState('<span class="status-pill ok">Task: timeout callback</span>', [], [], ['timeout callback'], '<span class="status-pill ok">render opportunity after task</span>', ['A', 'B', 'promise', 'timeout'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
