@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Render-Yield Debug Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board { display:grid; grid-template-columns:380px 1fr; gap:20px; flex:1; min-height:0; }
+    .panel { background:#fff; border:2px solid var(--color-border); border-radius:8px; box-shadow:0 4px 6px rgba(0,0,0,.08); padding:16px; overflow:auto; }
+    .section-title { margin:0 0 12px; color:var(--color-stack); font-size:15px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .row { display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center; margin-bottom:10px; }
+    .label { font-family:Consolas, monospace; font-size:13px; color:#415a77; font-weight:700; }
+    select { width:100%; padding:8px 10px; border:1px solid #c8d3dd; border-radius:6px; background:#f8fafc; font-size:14px; }
+    .toolbar, .preset-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn, .preset-btn { padding:8px 12px; border:none; border-radius:6px; background:var(--color-stack); color:#fff; cursor:pointer; font-weight:700; }
+    .btn.alt { background:#6c7a89; }
+    .preset-btn { background:#f8fafc; color:#243b53; border:1px solid #c8d3dd; font-size:13px; padding:6px 10px; }
+    .box { border:1px solid #d9e2ec; border-radius:8px; background:#f8fafc; padding:12px; margin-bottom:14px; }
+    .box-title { margin:0 0 8px; font-size:13px; text-transform:uppercase; color:#486581; font-weight:700; letter-spacing:.04em; }
+    .pill-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-family:Consolas, monospace; font-size:13px; font-weight:700; border:1px solid transparent; }
+    .sync-pill { background:#e8eef5; color:#334e68; border-color:#c9d6e2; }
+    .micro-pill { background:#e2f3ff; color:#0b4f79; border-color:#8ec9f0; }
+    .task-pill { background:#fff1d6; color:#8a5a00; border-color:#f1cf80; }
+    .raf-pill { background:#ece8ff; color:#4d3ca6; border-color:#b9b0f3; }
+    .layout-pill { background:#ffe9d6; color:#8a3b00; border-color:#f3c29b; }
+    .render-pill { background:#e8f7ec; color:#166534; border-color:#9fd8af; }
+    .warn-pill { background:#ffe1e1; color:#8b1e1e; border-color:#f3b1b1; }
+    .timeline { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+    .frame { border:1px solid #d9e2ec; border-radius:8px; background:#fff; min-height:220px; padding:10px; }
+    .frame h4 { margin:0 0 8px; font-size:13px; color:#243b53; }
+    .lane { margin-bottom:10px; }
+    .lane-title { font-size:11px; text-transform:uppercase; color:#7b8794; margin-bottom:4px; font-weight:700; letter-spacing:.04em; }
+    .event { font-size:12px; border-radius:6px; padding:5px 7px; margin-bottom:5px; border:1px solid #d9e2ec; background:#f8fafc; color:#243b53; font-family:Consolas, monospace; }
+    .event.sync { background:#eef3f8; }
+    .event.micro { background:#e7f4ff; }
+    .event.task { background:#fff5df; }
+    .event.raf { background:#f0ecff; }
+    .event.layout { background:#fff0e4; }
+    .event.render { background:#edf9f0; }
+    .event.missed { background:#ffe7e7; border-color:#f0b6b6; }
+    .code-preview { background:var(--code-bg); color:var(--code-text); border-radius:8px; padding:14px; font-family:Consolas, monospace; font-size:14px; line-height:1.6; white-space:pre-wrap; }
+    .explain-list { margin:0; padding-left:20px; }
+    .muted { color:#7b8794; font-size:14px; }
+    @media (max-width: 980px) { .board { grid-template-columns:1fr; } .timeline { grid-template-columns:1fr 1fr; } }
+    @media (max-width: 640px) { .timeline { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Render-Yield Debug Board</h2>
+    <p>Комбінуй DOM mutation, Promise, setTimeout, rAF, heavy sync work і layout read/write та дивись, коли browser реально отримує шанс на paint</p>
+  </div>
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Scenario</h3>
+        <div class="row"><div class="label">Mutation</div><select id="domSelect"><option value="none">No DOM mutation</option><option value="spinner">Show spinner</option><option value="status">Update status text</option><option value="class">Add CSS class</option></select></div>
+        <div class="row"><div class="label">Yield</div><select id="yieldSelect"><option value="none">No yield</option><option value="promise">await Promise.resolve()</option><option value="timeout">setTimeout(..., 0)</option><option value="raf">requestAnimationFrame(...)</option></select></div>
+        <div class="row"><div class="label">Work</div><select id="workSelect"><option value="none">No heavy work</option><option value="medium">Medium sync work (~9ms)</option><option value="heavy">Heavy sync work (~22ms)</option></select></div>
+        <div class="row"><div class="label">Layout</div><select id="layoutSelect"><option value="none">No layout reads</option><option value="single">One layout read</option><option value="thrash">Read/write thrash loop</option></select></div>
+        <div class="row"><div class="label">After yield</div><select id="afterSelect"><option value="none">No extra step</option><option value="heavy">Heavy work after yield</option><option value="layout">Layout read/write after yield</option></select></div>
+        <div class="row"><div class="label">Tab</div><select id="tabSelect"><option value="active">Active tab</option><option value="background">Background tab</option></select></div>
+        <div class="toolbar">
+          <button id="analyzeBtn" class="btn">Analyze</button>
+          <button id="resetBtn" class="btn alt">Reset</button>
+        </div>
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="spinner-trap">Spinner Trap</button>
+          <button class="preset-btn" data-preset="fake-yield">Fake Yield</button>
+          <button class="preset-btn" data-preset="raf-heavy">rAF + Heavy Work</button>
+          <button class="preset-btn" data-preset="layout-thrash">Layout Thrash</button>
+        </div>
+        <div class="box" style="margin-top:16px;">
+          <h4 class="box-title">Mental Model</h4>
+          <p style="margin:0; font-size:14px; color:#52606d;">Paint можливий тільки тоді, коли поточний turn завершився, microtasks віддреновані і browser отримав render opportunity. Не кожен "yield" однаково корисний для UI.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h3 class="section-title">Generated Code</h3>
+        <div id="codePreview" class="code-preview"></div>
+        <div class="box"><h4 class="box-title">Verdict</h4><div id="verdict" class="pill-list"></div></div>
+        <div class="box"><h4 class="box-title">Timeline</h4><div id="timeline" class="timeline"></div></div>
+        <div class="box"><h4 class="box-title">Why</h4><ol id="whyList" class="explain-list"></ol></div>
+        <div class="box"><h4 class="box-title">Warnings</h4><div id="warningList" class="muted"></div></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const costs = { none: 0, medium: 9, heavy: 22 };
+    const domMap = {
+      none: { code: '', text: null },
+      spinner: { code: 'spinner.hidden = false;', text: 'DOM mutation: spinner visible' },
+      status: { code: 'status.textContent = "Loading...";', text: 'DOM mutation: status text' },
+      class: { code: 'panel.classList.add("visible");', text: 'DOM mutation: CSS class added' }
+    };
+    const layoutMap = {
+      none: { code: '', text: null, cost: 0 },
+      single: { code: 'const w = card.offsetWidth;', text: 'layout read', cost: 3 },
+      thrash: { code: 'const w = card.offsetWidth;\\ncard.style.width = (w + 10) + "px";', text: 'layout thrash loop', cost: 10 }
+    };
+    const afterMap = {
+      none: { code: '', text: null, cost: 0, kind: 'none' },
+      heavy: { code: 'expensiveTransform();', text: 'heavy work after yield', cost: 22, kind: 'sync' },
+      layout: { code: 'const h = card.offsetHeight;\\ncard.style.height = (h + 10) + "px";', text: 'layout read/write after yield', cost: 10, kind: 'layout' }
+    };
+    const presets = {
+      'spinner-trap': { dom: 'spinner', yield: 'none', work: 'heavy', layout: 'none', after: 'none', tab: 'active' },
+      'fake-yield': { dom: 'spinner', yield: 'promise', work: 'none', layout: 'none', after: 'heavy', tab: 'active' },
+      'raf-heavy': { dom: 'class', yield: 'raf', work: 'none', layout: 'none', after: 'heavy', tab: 'active' },
+      'layout-thrash': { dom: 'status', yield: 'none', work: 'none', layout: 'thrash', after: 'none', tab: 'active' }
+    };
+
+    const domSelect = document.getElementById('domSelect');
+    const yieldSelect = document.getElementById('yieldSelect');
+    const workSelect = document.getElementById('workSelect');
+    const layoutSelect = document.getElementById('layoutSelect');
+    const afterSelect = document.getElementById('afterSelect');
+    const tabSelect = document.getElementById('tabSelect');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const codePreview = document.getElementById('codePreview');
+    const verdict = document.getElementById('verdict');
+    const timeline = document.getElementById('timeline');
+    const whyList = document.getElementById('whyList');
+    const warningList = document.getElementById('warningList');
+
+    function frames() { return [0,1,2,3].map(i => ({ title: `Frame ${i}`, sync: [], sched: [], render: [] })); }
+    function add(arr, idx, lane, text, cls='') { if (idx < 0 || idx >= arr.length || !text) return; arr[idx][lane].push({ text, cls }); }
+    function renderFrames(list) {
+      timeline.innerHTML = '';
+      list.forEach(frame => {
+        const node = document.createElement('div');
+        node.className = 'frame';
+        const lane = (items, fallback, extra='') => (items.length ? items : [{ text: fallback, cls: extra }]).map(e => `<div class="event ${e.cls}">${e.text}</div>`).join('');
+        node.innerHTML = `
+          <h4>${frame.title}</h4>
+          <div class="lane"><div class="lane-title">Main Thread</div>${lane(frame.sync, '—', 'sync')}</div>
+          <div class="lane"><div class="lane-title">Scheduler</div>${lane(frame.sched, '—', 'task')}</div>
+          <div class="lane"><div class="lane-title">Render</div>${lane(frame.render, '—', 'render')}</div>
+        `;
+        timeline.appendChild(node);
+      });
+    }
+    function buildCode(cfg) {
+      const parts = [];
+      if (domMap[cfg.dom].code) parts.push(domMap[cfg.dom].code);
+      if (layoutMap[cfg.layout].code) parts.push(layoutMap[cfg.layout].code);
+      if (cfg.work !== 'none') parts.push('expensiveWork();');
+      if (cfg.yield === 'promise') parts.push('await Promise.resolve();');
+      if (cfg.yield === 'timeout') parts.push('setTimeout(() => {\\n  ' + (afterMap[cfg.after].code || 'nextStep();') + '\\n}, 0);');
+      else if (cfg.yield === 'raf') parts.push('requestAnimationFrame(() => {\\n  ' + (afterMap[cfg.after].code || 'nextFrameStep();') + '\\n});');
+      else if (cfg.yield === 'promise' && cfg.after !== 'none') parts.push(afterMap[cfg.after].code);
+      else if (cfg.yield === 'none' && cfg.after !== 'none') parts.push(afterMap[cfg.after].code);
+      return parts.filter(Boolean).join('\\n');
+    }
+    function analyze() {
+      const cfg = { dom: domSelect.value, yield: yieldSelect.value, work: workSelect.value, layout: layoutSelect.value, after: afterSelect.value, tab: tabSelect.value };
+      const f = frames();
+      const why = [];
+      const warnings = [];
+      const pills = [];
+      const syncCost = costs[cfg.work] + layoutMap[cfg.layout].cost;
+      let renderFrame = syncCost > 16.7 ? 1 : 0;
+      add(f, 0, 'sync', domMap[cfg.dom].text, 'sync');
+      add(f, 0, 'sync', layoutMap[cfg.layout].text, cfg.layout === 'thrash' ? 'layout' : 'sync');
+      if (cfg.work !== 'none') add(f, 0, 'sync', `heavy sync work ${costs[cfg.work]}ms`, 'sync');
+
+      if (cfg.yield === 'promise') {
+        add(f, 0, 'sched', 'Promise continuation', 'micro');
+        why.push('`Promise` continuation іде в microtask queue, а microtasks дренуються до render opportunity.');
+        if (cfg.after !== 'none') {
+          add(f, 0, 'sync', afterMap[cfg.after].text, afterMap[cfg.after].kind === 'layout' ? 'layout' : 'sync');
+          renderFrame = 1;
+          warnings.push('Microtask continuation повертає важку роботу ще до paint. Це типовий fake yield.');
+        }
+        pills.push({ text: 'microtask yield only', cls: 'micro-pill' });
+      } else if (cfg.yield === 'timeout') {
+        add(f, 1, 'sched', 'timer callback', 'task');
+        why.push('`setTimeout(..., 0)` дає task boundary. Browser часто отримує шанс на paint між task-ами.');
+        if (cfg.after !== 'none') add(f, 1, 'sync', afterMap[cfg.after].text, afterMap[cfg.after].kind === 'layout' ? 'layout' : 'sync');
+        pills.push({ text: 'task boundary', cls: 'task-pill' });
+      } else if (cfg.yield === 'raf') {
+        if (cfg.tab === 'background') {
+          add(f, 2, 'sched', 'rAF throttled/paused', 'raf');
+          warnings.push('У background tab `requestAnimationFrame` не можна вважати надійним механізмом швидкого progress.');
+          renderFrame = 0;
+        } else {
+          add(f, renderFrame, 'sched', 'rAF callback before paint', 'raf');
+        }
+        why.push('`requestAnimationFrame` ставить callback у rendering scheduler перед наступним paint, а не просто в task queue.');
+        if (cfg.after !== 'none') {
+          const afterFrame = cfg.tab === 'background' ? 2 : renderFrame;
+          add(f, afterFrame, 'sync', afterMap[cfg.after].text, afterMap[cfg.after].kind === 'layout' ? 'layout' : 'sync');
+          if (afterMap[cfg.after].cost > 16.7) warnings.push('Важкий `rAF` callback може сам зламати frame budget і створити jank.');
+        }
+        pills.push({ text: 'frame-aligned callback', cls: 'raf-pill' });
+      } else {
+        why.push('Без explicit yield browser побачить render лише після завершення всього поточного sync work.');
+        pills.push({ text: 'no explicit yield', cls: 'warn-pill' });
+      }
+
+      if (cfg.layout === 'thrash' || cfg.after === 'layout') {
+        why.push('Layout read/write pattern може примусово форсити зайві recalculations і красти frame budget навіть без одного великого циклу.');
+        pills.push({ text: 'layout thrash risk', cls: 'layout-pill' });
+      }
+      if (cfg.dom !== 'none') why.push('DOM mutation змінює state, але pixels оновляться тільки після render opportunity.');
+      if (cfg.work === 'heavy' && cfg.yield === 'none') warnings.push('Один довгий sync task блокує paint та input повністю до завершення.');
+      if (cfg.yield === 'timeout' && cfg.after === 'heavy') warnings.push('Timer дає yield краще за Promise, але не дає frame-aligned semantics для animation.');
+      if (cfg.yield === 'raf' && cfg.after === 'heavy') warnings.push('`rAF` правильний для visual sync, але не для важкого callback без chunking.');
+      if (cfg.tab === 'background' && cfg.yield !== 'none') warnings.push('Background tab змінює scheduling policy: timers clamp-яться, а rAF часто паузиться.');
+
+      add(f, renderFrame, 'render', 'paint opportunity', 'render');
+      if (syncCost > 16.7 && cfg.yield !== 'timeout') add(f, 0, 'render', 'current frame missed', 'missed');
+      if (cfg.yield === 'promise' && cfg.after !== 'none') add(f, 0, 'render', 'paint still blocked', 'missed');
+
+      codePreview.textContent = buildCode(cfg);
+      verdict.innerHTML = pills.map(p => `<span class="pill ${p.cls}">${p.text}</span>`).join('');
+      renderFrames(f);
+      whyList.innerHTML = why.map(x => `<li>${x}</li>`).join('');
+      warningList.innerHTML = warnings.length ? warnings.map(x => `<span class="pill warn-pill">${x}</span>`).join(' ') : 'No extra warnings for this scenario.';
+    }
+    function reset() {
+      domSelect.value='spinner'; yieldSelect.value='none'; workSelect.value='heavy'; layoutSelect.value='none'; afterSelect.value='none'; tabSelect.value='active'; analyze();
+    }
+    document.querySelectorAll('[data-preset]').forEach(btn => btn.addEventListener('click', () => {
+      const p = presets[btn.dataset.preset];
+      domSelect.value = p.dom; yieldSelect.value = p.yield; workSelect.value = p.work; layoutSelect.value = p.layout; afterSelect.value = p.after; tabSelect.value = p.tab; analyze();
+    }));
+    analyzeBtn.addEventListener('click', analyze);
+    resetBtn.addEventListener('click', reset);
+    reset();
+  </script>
+</body>
+</html>
