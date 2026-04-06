@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Property Descriptors</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .str { color: #98c379; }
+    .var { color: #e06c75; }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 230px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .desc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Property Descriptors</h2>
+  <p>Покроково: одна властивість і три основні прапорці — <code>writable</code>, <code>enumerable</code>, <code>configurable</code>.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex:1.05;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> {}<span class="op">;</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="fn">Object</span>.<span class="fn">defineProperty</span>(<span class="var">user</span>, <span class="str">"id"</span>, {</div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="var">value</span>: <span class="num">42</span><span class="op">,</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  <span class="var">writable</span>: <span class="kw">false</span><span class="op">,</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  <span class="var">enumerable</span>: <span class="kw">true</span><span class="op">,</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>  <span class="var">configurable</span>: <span class="kw">false</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>})<span class="op">;</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="var">user</span>.<span class="var">id</span> <span class="op">=</span> <span class="num">100</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="fn">Object</span>.<span class="fn">keys</span>(<span class="var">user</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="kw">delete</span> <span class="var">user</span>.<span class="var">id</span><span class="op">;</span></div>
+    </div>
+
+    <div style="flex:1.35;display:flex;flex-direction:column;gap:16px;">
+      <div class="desc-grid">
+        <div class="panel">
+          <div class="panel-title">Descriptor</div>
+          <div class="card">
+            <div class="record-table">
+              <div>value:</div><div id="dValue">-</div>
+              <div>writable:</div><div id="dWritable">-</div>
+              <div>enumerable:</div><div id="dEnumerable">-</div>
+              <div>configurable:</div><div id="dConfigurable">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Observed Behavior</div>
+          <div class="card">
+            <div class="record-table">
+              <div>assignment:</div><div id="assignResult">-</div>
+              <div>Object.keys:</div><div id="keysResult">-</div>
+              <div>delete:</div><div id="deleteResult">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height:none;min-height:180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Дія (What):</span><span class="js-lab-log-content" id="log-what"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Причина (Why):</span><span class="js-lab-log-content" id="log-why"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Висновок:</span><span class="js-lab-log-content" id="log-insight" style="color:var(--log-accent);font-weight:bold;"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+    function paint(state) {
+      document.getElementById('dValue').textContent = state.value;
+      document.getElementById('dWritable').textContent = state.writable;
+      document.getElementById('dEnumerable').textContent = state.enumerable;
+      document.getElementById('dConfigurable').textContent = state.configurable;
+      document.getElementById('assignResult').textContent = state.assign;
+      document.getElementById('keysResult').textContent = state.keys;
+      document.getElementById('deleteResult').textContent = state.del;
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3', 'line4', 'line5', 'line6', 'line7'],
+          narration: {
+            title: 'Descriptor Created',
+            what: 'Створено властивість `id` не через plain assignment, а через explicit descriptor.',
+            why: 'Тепер поведінка властивості визначається не лише value, а й трьома прапорцями.',
+            insight: 'Саме descriptors пояснюють, чому дві зовні схожі властивості можуть поводитися по-різному.'
+          },
+          action: () => paint({
+            value: '42',
+            writable: 'false',
+            enumerable: 'true',
+            configurable: 'false',
+            assign: 'not tried yet',
+            keys: 'not checked yet',
+            del: 'not tried yet'
+          })
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: 'Assignment Checked by writable',
+            what: 'Спроба `user.id = 100` блокується прапорцем `writable: false`.',
+            why: 'Descriptor каже, що value не можна переприсвоїти звичайним assignment path.',
+            insight: 'Без descriptors розробник легко припускає, що "поле є, значить його можна змінити".'
+          },
+          action: () => paint({
+            value: '42',
+            writable: 'false',
+            enumerable: 'true',
+            configurable: 'false',
+            assign: 'blocked / no change',
+            keys: 'not checked yet',
+            del: 'not tried yet'
+          })
+        },
+        {
+          codeLine: 'line9',
+          narration: {
+            title: 'Enumeration Checked by enumerable',
+            what: '`Object.keys(user)` все ще показує `id`.',
+            why: 'Прапорець `enumerable: true` дозволяє властивості брати участь у стандартній enumeration.',
+            insight: 'Тут добре видно, що writable і enumerable — незалежні осі поведінки.'
+          },
+          action: () => paint({
+            value: '42',
+            writable: 'false',
+            enumerable: 'true',
+            configurable: 'false',
+            assign: 'blocked / no change',
+            keys: '["id"]',
+            del: 'not tried yet'
+          })
+        },
+        {
+          codeLine: 'line10',
+          narration: {
+            title: 'Deletion Checked by configurable',
+            what: 'Спроба `delete user.id` не видаляє властивість.',
+            why: 'Прапорець `configurable: false` блокує delete і значну частину redefinition semantics.',
+            insight: 'Саме configurable часто найменш інтуїтивний, але дуже сильний прапорець.'
+          },
+          action: () => paint({
+            value: '42',
+            writable: 'false',
+            enumerable: 'true',
+            configurable: 'false',
+            assign: 'blocked / no change',
+            keys: '["id"]',
+            del: 'blocked / property stays'
+          })
+        },
+        {
+          codeLine: ['line8', 'line9', 'line10'],
+          narration: {
+            title: 'Descriptor Summary',
+            what: 'Три операції — assignment, enumeration, delete — читають різні частини одного descriptor.',
+            why: 'Descriptor model пояснює API behavior значно краще, ніж проста модель "є поле з value".',
+            insight: 'Практичне правило: коли behavior property дивний, дивіться не лише на value, а на descriptor.'
+          },
+          action: () => paint({
+            value: '42',
+            writable: 'false',
+            enumerable: 'true',
+            configurable: 'false',
+            assign: 'controlled by writable',
+            keys: 'controlled by enumerable',
+            del: 'controlled by configurable'
+          })
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
