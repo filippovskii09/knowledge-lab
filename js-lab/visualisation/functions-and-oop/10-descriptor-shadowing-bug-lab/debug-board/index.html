@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Descriptor + Shadowing Debug Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .debug-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      border: 2px solid var(--color-border);
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+      padding: 14px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .control-group {
+      padding: 10px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid #dde6ef;
+    }
+
+    .group-label {
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .field:last-child {
+      margin-bottom: 0;
+    }
+
+    .field label {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .field input[type="text"],
+    .field select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      font: inherit;
+      background: #fff;
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .action-btn,
+    .reset-btn {
+      appearance: none;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font: inherit;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .action-btn {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .reset-btn {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .scene {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .object-card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .object-card.parent {
+      border-color: #9b59b6;
+      background: #faf5fb;
+    }
+
+    .object-card.child {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .object-title {
+      font-weight: 700;
+      margin-bottom: 8px;
+      font-family: monospace;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .proto-link {
+      text-align: center;
+      color: #7c3aed;
+      font-weight: 700;
+      margin: 8px 0;
+      font-family: monospace;
+    }
+
+    .result-card {
+      border: 2px solid #e67e22;
+      background: #fff4e6;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .result-title {
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #9a3412;
+    }
+
+    .log-line {
+      margin-bottom: 6px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .muted {
+      color: #6b7280;
+    }
+
+    @media (max-width: 980px) {
+      .debug-grid,
+      .scene {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script>
+    const root = document.getElementById('js-lab-visualizer');
+
+    root.innerHTML = `
+<div class="js-lab-header">
+  <h2>Descriptor + Shadowing Debug Board</h2>
+  <p>Інтерактивна дошка для діагностики: вмикайте own property, prototype property і descriptor flags, а потім дивіться, як міняються lookup, assignment, delete і enumeration.</p>
+</div>
+
+<div class="debug-grid">
+  <div class="panel">
+    <div class="panel-title">Controls</div>
+    <div class="controls">
+      <div class="control-group">
+        <div class="group-label">Prototype Property</div>
+        <div class="field">
+          <label for="protoMode">Mode</label>
+          <select id="protoMode">
+            <option value="data">Data property</option>
+            <option value="getter">Getter</option>
+            <option value="none">Absent</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="protoValue">Prototype value</label>
+          <input id="protoValue" type="text" value="parent-value">
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="group-label">Own Property</div>
+        <div class="check-row">
+          <input id="ownEnabled" type="checkbox" checked>
+          <label for="ownEnabled">Own property exists on child</label>
+        </div>
+        <div class="field">
+          <label for="ownMode">Mode</label>
+          <select id="ownMode">
+            <option value="data">Data property</option>
+            <option value="getter">Getter</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ownValue">Own value</label>
+          <input id="ownValue" type="text" value="child-value">
+        </div>
+        <div class="check-row">
+          <input id="flagWritable" type="checkbox" checked>
+          <label for="flagWritable">writable</label>
+        </div>
+        <div class="check-row">
+          <input id="flagEnumerable" type="checkbox" checked>
+          <label for="flagEnumerable">enumerable</label>
+        </div>
+        <div class="check-row">
+          <input id="flagConfigurable" type="checkbox" checked>
+          <label for="flagConfigurable">configurable</label>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <div class="group-label">Actions</div>
+        <div class="button-row">
+          <button id="btnRead" class="action-btn">Read child.value</button>
+          <button id="btnAssign" class="action-btn">Assign "new-value"</button>
+          <button id="btnKeys" class="action-btn">Object.keys(child)</button>
+          <button id="btnDelete" class="action-btn">Delete child.value</button>
+          <button id="btnReset" class="reset-btn">Reset log</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="scene">
+      <div class="panel">
+        <div class="panel-title">Prototype Chain</div>
+        <div class="object-card parent">
+          <div class="object-title">proto</div>
+          <div class="record-table" id="protoTable"></div>
+        </div>
+        <div class="proto-link">[[Prototype]]</div>
+        <div class="object-card child">
+          <div class="object-title">child</div>
+          <div class="record-table" id="childTable"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Current Semantics</div>
+        <div class="result-card">
+          <div class="result-title">Lookup Summary</div>
+          <div class="log-line" id="lookupSummary"></div>
+          <div class="log-line" id="descriptorSummary"></div>
+          <div class="log-line" id="reasonSummary"></div>
+        </div>
+        <div class="result-card">
+          <div class="result-title">Last Operation</div>
+          <div class="log-line" id="lastOperation">No action yet.</div>
+          <div class="log-line muted" id="lastWhy"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Debug Log</div>
+      <div id="debugLog"></div>
+    </div>
+  </div>
+</div>`;
+
+    const defaults = {
+      protoMode: 'data',
+      protoValue: 'parent-value',
+      ownEnabled: true,
+      ownMode: 'data',
+      ownValue: 'child-value',
+      writable: true,
+      enumerable: true,
+      configurable: true
+    };
+
+    let state = { ...defaults };
+    let logEntries = [];
+
+    const el = {
+      protoMode: document.getElementById('protoMode'),
+      protoValue: document.getElementById('protoValue'),
+      ownEnabled: document.getElementById('ownEnabled'),
+      ownMode: document.getElementById('ownMode'),
+      ownValue: document.getElementById('ownValue'),
+      flagWritable: document.getElementById('flagWritable'),
+      flagEnumerable: document.getElementById('flagEnumerable'),
+      flagConfigurable: document.getElementById('flagConfigurable'),
+      protoTable: document.getElementById('protoTable'),
+      childTable: document.getElementById('childTable'),
+      lookupSummary: document.getElementById('lookupSummary'),
+      descriptorSummary: document.getElementById('descriptorSummary'),
+      reasonSummary: document.getElementById('reasonSummary'),
+      lastOperation: document.getElementById('lastOperation'),
+      lastWhy: document.getElementById('lastWhy'),
+      debugLog: document.getElementById('debugLog'),
+      btnRead: document.getElementById('btnRead'),
+      btnAssign: document.getElementById('btnAssign'),
+      btnKeys: document.getElementById('btnKeys'),
+      btnDelete: document.getElementById('btnDelete'),
+      btnReset: document.getElementById('btnReset')
+    };
+
+    function syncStateFromControls() {
+      state = {
+        protoMode: el.protoMode.value,
+        protoValue: el.protoValue.value,
+        ownEnabled: el.ownEnabled.checked,
+        ownMode: el.ownMode.value,
+        ownValue: el.ownValue.value,
+        writable: el.flagWritable.checked,
+        enumerable: el.flagEnumerable.checked,
+        configurable: el.flagConfigurable.checked
+      };
+    }
+
+    function getProtoDescriptor() {
+      if (state.protoMode === 'none') return null;
+      if (state.protoMode === 'getter') {
+        return {
+          kind: 'accessor',
+          get: `() => "${state.protoValue}"`,
+          enumerable: true,
+          configurable: true
+        };
+      }
+
+      return {
+        kind: 'data',
+        value: state.protoValue,
+        writable: true,
+        enumerable: true,
+        configurable: true
+      };
+    }
+
+    function getOwnDescriptor() {
+      if (!state.ownEnabled) return null;
+      if (state.ownMode === 'getter') {
+        return {
+          kind: 'accessor',
+          get: `() => "${state.ownValue}"`,
+          enumerable: state.enumerable,
+          configurable: state.configurable
+        };
+      }
+
+      return {
+        kind: 'data',
+        value: state.ownValue,
+        writable: state.writable,
+        enumerable: state.enumerable,
+        configurable: state.configurable
+      };
+    }
+
+    function renderDescriptor(target, descriptor) {
+      if (!descriptor) {
+        target.innerHTML = '<div class="muted">value: &lt;absent&gt;</div>';
+        return;
+      }
+
+      if (descriptor.kind === 'accessor') {
+        target.innerHTML = `
+          <div>value:</div><div>&lt;accessor&gt;</div>
+          <div>get:</div><div>${descriptor.get}</div>
+          <div>enumerable:</div><div>${String(descriptor.enumerable)}</div>
+          <div>configurable:</div><div>${String(descriptor.configurable)}</div>
+        `;
+        return;
+      }
+
+      target.innerHTML = `
+        <div>value:</div><div>${descriptor.value}</div>
+        <div>writable:</div><div>${String(descriptor.writable)}</div>
+        <div>enumerable:</div><div>${String(descriptor.enumerable)}</div>
+        <div>configurable:</div><div>${String(descriptor.configurable)}</div>
+      `;
+    }
+
+    function describeLookup() {
+      const own = getOwnDescriptor();
+      const proto = getProtoDescriptor();
+
+      if (own) {
+        if (own.kind === 'accessor') {
+          return {
+            value: state.ownValue,
+            from: 'own accessor',
+            why: 'Own descriptor found first, so prototype is not consulted.'
+          };
+        }
+
+        return {
+          value: own.value,
+          from: 'own data property',
+          why: 'Own property shadows any property with the same name in the prototype.'
+        };
+      }
+
+      if (proto) {
+        if (proto.kind === 'accessor') {
+          return {
+            value: state.protoValue,
+            from: 'prototype getter',
+            why: 'No own property exists, so lookup continues into the prototype and executes the accessor path.'
+          };
+        }
+
+        return {
+          value: proto.value,
+          from: 'prototype data property',
+          why: 'No own property exists, so lookup resolves via the prototype chain.'
+        };
+      }
+
+      return {
+        value: 'undefined',
+        from: 'no property found',
+        why: 'Neither child nor prototype provides the property.'
+      };
+    }
+
+    function renderBoard() {
+      const proto = getProtoDescriptor();
+      const own = getOwnDescriptor();
+      const lookup = describeLookup();
+
+      renderDescriptor(el.protoTable, proto);
+      renderDescriptor(el.childTable, own);
+
+      el.lookupSummary.textContent = `Read child.value -> ${lookup.value} (${lookup.from})`;
+      el.descriptorSummary.textContent = own
+        ? `Child has own ${own.kind} descriptor.`
+        : proto
+          ? `Child has no own property; prototype lookup is active.`
+          : `Property is absent on both child and prototype.`;
+      el.reasonSummary.textContent = lookup.why;
+
+      if (!logEntries.length) {
+        el.debugLog.innerHTML = '<div class="log-line muted">No operations yet. Change controls or click an action.</div>';
+      } else {
+        el.debugLog.innerHTML = logEntries
+          .map((entry) => `<div class="log-line">${entry}</div>`)
+          .join('');
+      }
+    }
+
+    function setLast(op, why) {
+      el.lastOperation.textContent = op;
+      el.lastWhy.textContent = why;
+    }
+
+    function addLog(entry) {
+      logEntries.unshift(entry);
+      logEntries = logEntries.slice(0, 10);
+      renderBoard();
+    }
+
+    function handleRead() {
+      syncStateFromControls();
+      const lookup = describeLookup();
+      setLast(`Read child.value -> ${lookup.value}`, lookup.why);
+      addLog(`READ: ${lookup.value} from ${lookup.from}`);
+    }
+
+    function handleAssign() {
+      syncStateFromControls();
+      const own = getOwnDescriptor();
+      const proto = getProtoDescriptor();
+
+      if (own && own.kind === 'data') {
+        if (own.writable) {
+          state.ownValue = 'new-value';
+          el.ownValue.value = 'new-value';
+          setLast('Assignment succeeded on own property.', 'The child already has a writable own data descriptor.');
+          addLog('ASSIGN: own writable property updated to "new-value"');
+        } else {
+          setLast('Assignment blocked.', 'The child has an own data descriptor with writable: false.');
+          addLog('ASSIGN: blocked by writable: false');
+        }
+        renderBoard();
+        return;
+      }
+
+      if (own && own.kind === 'accessor') {
+        setLast('Assignment has no visible effect here.', 'The child property is modeled as an accessor without a setter in this board.');
+        addLog('ASSIGN: accessor without setter, no state change');
+        renderBoard();
+        return;
+      }
+
+      state.ownEnabled = true;
+      el.ownEnabled.checked = true;
+      state.ownMode = 'data';
+      el.ownMode.value = 'data';
+      state.ownValue = 'new-value';
+      el.ownValue.value = 'new-value';
+      state.writable = true;
+      el.flagWritable.checked = true;
+
+      if (proto) {
+        setLast('Assignment created an own property on child.', 'Without an own blocking descriptor, this board models assignment as creating/shadowing a child data property.');
+        addLog('ASSIGN: created own child property and shadowed prototype');
+      } else {
+        setLast('Assignment created a plain own property.', 'No property existed before, so child now gets its own data property.');
+        addLog('ASSIGN: created own child property');
+      }
+      syncStateFromControls();
+      renderBoard();
+    }
+
+    function handleKeys() {
+      syncStateFromControls();
+      const own = getOwnDescriptor();
+      const keys = own && own.enumerable ? '["value"]' : '[]';
+      setLast(`Object.keys(child) -> ${keys}`, 'Object.keys only reports enumerable own properties, never prototype properties.');
+      addLog(`ENUM: Object.keys(child) -> ${keys}`);
+      renderBoard();
+    }
+
+    function handleDelete() {
+      syncStateFromControls();
+      const own = getOwnDescriptor();
+
+      if (!own) {
+        setLast('Delete has no visible effect on child own state.', 'There is no own property to delete.');
+        addLog('DELETE: no own property present');
+        renderBoard();
+        return;
+      }
+
+      if (!own.configurable) {
+        setLast('Delete blocked.', 'The own descriptor has configurable: false.');
+        addLog('DELETE: blocked by configurable: false');
+        renderBoard();
+        return;
+      }
+
+      state.ownEnabled = false;
+      el.ownEnabled.checked = false;
+      setLast('Own property deleted.', 'After deletion, lookup falls back to the prototype if it has a matching property.');
+      addLog('DELETE: own property removed, lookup may fall back to prototype');
+      syncStateFromControls();
+      renderBoard();
+    }
+
+    function handleReset() {
+      state = { ...defaults };
+      el.protoMode.value = state.protoMode;
+      el.protoValue.value = state.protoValue;
+      el.ownEnabled.checked = state.ownEnabled;
+      el.ownMode.value = state.ownMode;
+      el.ownValue.value = state.ownValue;
+      el.flagWritable.checked = state.writable;
+      el.flagEnumerable.checked = state.enumerable;
+      el.flagConfigurable.checked = state.configurable;
+      logEntries = [];
+      setLast('Board reset to defaults.', 'Use the controls to build new descriptor and shadowing scenarios.');
+      renderBoard();
+    }
+
+    [
+      el.protoMode,
+      el.protoValue,
+      el.ownEnabled,
+      el.ownMode,
+      el.ownValue,
+      el.flagWritable,
+      el.flagEnumerable,
+      el.flagConfigurable
+    ].forEach((node) => {
+      node.addEventListener('input', () => {
+        syncStateFromControls();
+        renderBoard();
+      });
+      node.addEventListener('change', () => {
+        syncStateFromControls();
+        renderBoard();
+      });
+    });
+
+    el.btnRead.addEventListener('click', handleRead);
+    el.btnAssign.addEventListener('click', handleAssign);
+    el.btnKeys.addEventListener('click', handleKeys);
+    el.btnDelete.addEventListener('click', handleDelete);
+    el.btnReset.addEventListener('click', handleReset);
+
+    handleReset();
+  </script>
+</body>
+</html>
