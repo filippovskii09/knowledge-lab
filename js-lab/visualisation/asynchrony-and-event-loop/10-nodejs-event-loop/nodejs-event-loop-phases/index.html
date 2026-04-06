@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Node.js Event Loop Phases</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Node.js Event Loop Phases</h2>
+    <p>nextTick, promise microtasks, timers, check</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="com">// inside an I/O callback in Node.js</span></div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="fn">setTimeout</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"timeout"</span>), <span class="val-num">0</span>);</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="fn">setImmediate</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"immediate"</span>));</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="fn">Promise.resolve</span>().<span class="fn">then</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"promise"</span>));</div>
+<div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="fn">process.nextTick</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"nextTick"</span>));</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Current Phase</div><div id="phaseBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">nextTick Queue</div><div id="tickBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Promise Microtasks</div><div id="microtaskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Timers / Check</div><div id="phaseQueuesBox" class="phase-list"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function renderPhaseQueues(timers, check) {
+      $('phaseQueuesBox').innerHTML = [
+        `<div class="phase-item">timers: ${timers}</div>`,
+        `<div class="phase-item">check: ${check}</div>`
+      ].join('');
+    }
+    function nodeState(phase, ticks, microtasks, timers, check, logs) {
+      setText('phaseBox', phase);
+      renderList('tickBox', ticks);
+      renderList('microtaskBox', microtasks);
+      renderPhaseQueues(timers, check);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line1',
+  state: { stack: ['I/O callback'], heap: [] },
+  narration: {
+    title: 'Scheduling Inside I/O Callback',
+    what: 'Ми навмисно знаходимося всередині I/O callback, щоб показати phases без top-level ambiguity.',
+    why: 'Після I/O boundary співвідношення `setImmediate` і `setTimeout(0)` стає наочнішим.',
+    insight: 'Це кращий навчальний сценарій, ніж безконтекстний top-level snippet.'
+  },
+  action: () => nodeState('<span class="status-pill neutral">inside poll callback</span>', [], [], 'empty', 'empty', [])
+},
+{
+  codeLine: 'line5',
+  state: { stack: ['I/O callback'], heap: [] },
+  narration: {
+    title: 'nextTick Has Highest Local Priority',
+    what: 'process.nextTick ставиться в окрему дуже ранню queue.',
+    why: 'Node дренує nextTick queue раніше за promise microtasks.',
+    insight: 'Зловживання nextTick може створювати starvation навіть у Node.'
+  },
+  action: () => nodeState('<span class="status-pill neutral">I/O callback finishing</span>', ['nextTick'], [], 'timeout ready later', 'immediate queued for check', [])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['I/O callback'], heap: [] },
+  narration: {
+    title: 'Promise Microtask Queued Too',
+    what: 'Promise.then іде в microtask queue, але все ще після nextTick.',
+    why: 'Node має окремий scheduling nuance поверх загальної promise model.',
+    insight: 'Не можна механічно переносити browser mental model на Node without this adjustment.'
+  },
+  action: () => nodeState('<span class="status-pill neutral">I/O callback finishing</span>', ['nextTick'], ['promise'], 'timeout ready later', 'immediate queued for check', [])
+},
+{
+  codeLine: 'line5',
+  state: { stack: ['nextTick'], heap: [] },
+  narration: {
+    title: 'Drain nextTick First',
+    what: 'Після поточного callback Node спершу виконує nextTick queue.',
+    why: 'Це раніше за promise microtasks.',
+    insight: 'Порядок `nextTick` before promise — один із найважливіших Node-specific details.'
+  },
+  action: () => nodeState('<span class="status-pill ok">draining nextTick</span>', ['nextTick'], ['promise'], 'timeout ready later', 'immediate queued for check', ['nextTick'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['promise microtask'], heap: [] },
+  narration: {
+    title: 'Then Promise Microtasks',
+    what: 'Після nextTick Node виконує promise microtasks.',
+    why: 'Тільки після цього loop повертається до phases.',
+    insight: 'Навіть на сервері microtasks — це окремий важливий шар над phase machine.'
+  },
+  action: () => nodeState('<span class="status-pill ok">draining promise microtasks</span>', [], ['promise'], 'timeout ready later', 'immediate queued for check', ['nextTick', 'promise'])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['check phase'], heap: [] },
+  narration: {
+    title: 'Check Phase Runs setImmediate',
+    what: 'Після цього сценарію loop доходить до check phase і виконує setImmediate.',
+    why: 'Ми всередині I/O callback context, тому setImmediate тут природно ближчий.',
+    insight: 'Саме тому безконтекстне “що швидше: timeout чи immediate?” — погане питання.'
+  },
+  action: () => nodeState('<span class="status-pill ok">check phase</span>', [], [], 'timeout waiting for timers phase', 'immediate running now', ['nextTick', 'promise', 'immediate'])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['timers phase'], heap: [] },
+  narration: {
+    title: 'Timers Phase Afterward',
+    what: 'Timer callback виконується вже на timers phase, окремо від check phase.',
+    why: 'Node loop мислить фазами, а не однією універсальною “чергою async callbacks”.',
+    insight: 'Модель через phases надійніша за зубріння окремих order examples.'
+  },
+  action: () => nodeState('<span class="status-pill ok">timers phase</span>', [], [], 'timeout running now', 'immediate already done', ['nextTick', 'promise', 'immediate', 'timeout'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
