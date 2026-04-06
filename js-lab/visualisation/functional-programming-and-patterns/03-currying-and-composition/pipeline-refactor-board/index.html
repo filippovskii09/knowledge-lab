@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Pipeline Refactor Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .board { display: grid; grid-template-columns: 340px 1fr; gap: 20px; flex: 1; min-height: 0; }
+    .panel { background: #fff; border: 2px solid var(--color-border); border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.08); padding: 16px; overflow: auto; }
+    .section-title { margin: 0 0 12px 0; color: var(--color-stack); font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    label { display: block; font-size: 13px; font-weight: 700; color: #486581; margin-bottom: 6px; }
+    select, button { width: 100%; padding: 9px 10px; border-radius: 6px; border: 1px solid #c8d3dd; background: #f8fafc; font-size: 14px; }
+    .control-row { margin-bottom: 12px; }
+    .toolbar { display: flex; gap: 10px; margin-top: 12px; }
+    .toolbar button { border: none; background: var(--color-stack); color: #fff; font-weight: 700; cursor: pointer; }
+    .toolbar button.alt { background: #6c7a89; }
+    .preset-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .preset-btn { width: auto; padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+    .box { border: 1px solid #d9e2ec; border-radius: 8px; background: #f8fafc; padding: 12px; margin-bottom: 14px; }
+    .code-preview { background: var(--code-bg); color: var(--code-text); border-radius: 8px; padding: 14px; font-family: Consolas, monospace; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+    .pill-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill { display: inline-block; padding: 6px 10px; border-radius: 999px; font-family: Consolas, monospace; font-size: 13px; font-weight: 700; border: 1px solid transparent; }
+    .good-pill { background: #d6f5e8; color: #146c43; border-color: #97dbbb; }
+    .warn-pill { background: #fff3cd; color: #8a6d1f; border-color: #f1cf80; }
+    .bad-pill { background: #ffe1e1; color: #8b1e1e; border-color: #e9a8a8; }
+    .neutral-pill { background: #e8eef5; color: #415a77; border-color: #c7d3df; }
+    .explain-list { margin: 0; padding-left: 20px; }
+    @media (max-width: 960px) { .board { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Pipeline Refactor Board</h2>
+    <p>Порівняй `loop`, `HOF pipeline` і `composition` по читабельності, reuse і debug cost</p>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="board">
+      <div class="panel">
+        <h3 class="section-title">Scenario Builder</h3>
+
+        <div class="control-row">
+          <label for="taskSelect">Task Type</label>
+          <select id="taskSelect">
+            <option value="filter-map">Filter + map list</option>
+            <option value="single-pass-total">Compute final total</option>
+            <option value="normalize-input">Normalize user input</option>
+          </select>
+        </div>
+
+        <div class="control-row">
+          <label for="styleSelect">Refactor Style</label>
+          <select id="styleSelect">
+            <option value="loop">Explicit loop</option>
+            <option value="hof">HOF pipeline</option>
+            <option value="composition">Composed transforms</option>
+          </select>
+        </div>
+
+        <div class="control-row">
+          <label for="prioritySelect">Primary Priority</label>
+          <select id="prioritySelect">
+            <option value="clarity">Clarity</option>
+            <option value="reuse">Reuse</option>
+            <option value="debuggability">Debuggability</option>
+          </select>
+        </div>
+
+        <div class="toolbar">
+          <button id="analyzeBtn">Analyze</button>
+          <button id="clearBtn" class="alt">Reset</button>
+        </div>
+
+        <h3 class="section-title" style="margin-top:16px;">Presets</h3>
+        <div class="preset-list">
+          <button class="preset-btn" data-preset="loop-wins">Loop Wins</button>
+          <button class="preset-btn" data-preset="hof-fit">HOF Fit</button>
+          <button class="preset-btn" data-preset="composition-fit">Composition Fit</button>
+          <button class="preset-btn" data-preset="overcomposed">Over-Composed</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="section-title">Generated Refactor</h3>
+        <div id="codePreview" class="code-preview"></div>
+
+        <div class="box">
+          <h4 class="section-title" style="font-size:13px; margin-bottom:8px;">Verdict</h4>
+          <div id="verdictList" class="pill-list"></div>
+        </div>
+
+        <div class="box">
+          <h4 class="section-title" style="font-size:13px; margin-bottom:8px;">Why</h4>
+          <ol id="explainList" class="explain-list"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+    void JSLabEngine;
+
+    const codePreview = document.getElementById('codePreview');
+    const verdictList = document.getElementById('verdictList');
+    const explainList = document.getElementById('explainList');
+
+    const recipes = {
+      'filter-map': {
+        loop: `const result = [];\nfor (const user of users) {\n  if (user.active) {\n    result.push(user.name);\n  }\n}`,
+        hof: `const result = users\n  .filter(user => user.active)\n  .map(user => user.name);`,
+        composition: `const isActive = user => user.active;\nconst getName = user => user.name;\nconst result = users.filter(isActive).map(getName);`
+      },
+      'single-pass-total': {
+        loop: `let total = 0;\nfor (const order of orders) {\n  if (order.active) {\n    total += order.amount;\n  }\n}`,
+        hof: `const total = orders\n  .filter(order => order.active)\n  .reduce((sum, order) => sum + order.amount, 0);`,
+        composition: `const activeAmounts = orders\n  .filter(order => order.active)\n  .map(order => order.amount);\nconst total = activeAmounts.reduce((sum, amount) => sum + amount, 0);`
+      },
+      'normalize-input': {
+        loop: `let value = input;\nvalue = value.trim();\nvalue = value.toLowerCase();\nvalue = value.replaceAll(' ', '-');`,
+        hof: `const value = [\n  v => v.trim(),\n  v => v.toLowerCase(),\n  v => v.replaceAll(' ', '-')\n].reduce((acc, fn) => fn(acc), input);`,
+        composition: `const trim = v => v.trim();\nconst lower = v => v.toLowerCase();\nconst slugify = v => v.replaceAll(' ', '-');\nconst normalize = value => slugify(lower(trim(value)));`
+      }
+    };
+
+    function pill(label, cls) {
+      return `<span class="pill ${cls}">${label}</span>`;
+    }
+
+    function analyze() {
+      const task = document.getElementById('taskSelect').value;
+      const style = document.getElementById('styleSelect').value;
+      const priority = document.getElementById('prioritySelect').value;
+      const code = recipes[task][style];
+      const explanations = [];
+      const verdicts = [];
+
+      codePreview.textContent = code;
+
+      if (task === 'filter-map' && style === 'hof') {
+        verdicts.push(pill('good fit', 'good-pill'));
+        explanations.push('Selection + one-to-one transform — це природний сценарій для `filter` + `map`.');
+      }
+      if (task === 'single-pass-total' && style === 'loop') {
+        verdicts.push(pill('clarity-first fit', 'good-pill'));
+        explanations.push('Один loop тут часто читається простіше, ніж кілька кроків pipeline з accumulator logic.');
+      }
+      if (task === 'normalize-input' && style === 'composition') {
+        verdicts.push(pill('reuse-first fit', 'good-pill'));
+        explanations.push('Маленькі unary transforms легко перевикористовувати і перевіряти окремо.');
+      }
+      if (style === 'composition' && task === 'single-pass-total') {
+        verdicts.push(pill('over-composed risk', 'bad-pill'));
+        explanations.push('Тут composition починає дробити просту accumulation-задачу на занадто багато кроків без явної вигоди.');
+      }
+      if (style === 'hof' && task === 'normalize-input') {
+        verdicts.push(pill('possible but noisy', 'warn-pill'));
+        explanations.push('`reduce` для послідовного transform-chain працює, але часто гірше читається за явну composition-функцію.');
+      }
+      if (style === 'loop' && priority === 'debuggability') {
+        verdicts.push(pill('debug-friendly', 'good-pill'));
+        explanations.push('Loop дає очевидні точки зупинки й проміжні значення без додаткової розшифровки pipeline.');
+      }
+      if (style !== 'composition' && priority === 'reuse' && task === 'normalize-input') {
+        verdicts.push(pill('reuse underused', 'warn-pill'));
+        explanations.push('Коли пріоритет — reusable transforms, composition або curried helpers зазвичай виграють.');
+      }
+      if (style === 'hof' && priority === 'clarity' && task === 'filter-map') {
+        verdicts.push(pill('clarity preserved', 'good-pill'));
+      }
+
+      if (!verdicts.length) {
+        verdicts.push(pill('trade-off decision', 'neutral-pill'));
+        explanations.push('Тут немає абсолютного “найфункціональнішого” варіанта. Вибір залежить від shape задачі й пріоритету.');
+      }
+
+      explanations.push('Головне правило: не просувати HOF або composition там, де explicit code already explains intent better.');
+      if (priority === 'reuse') explanations.push('Коли кроки починають повторюватися між модулями, маленькі pure transforms дають найбільший виграш.');
+      if (priority === 'clarity') explanations.push('Якщо solution важко пояснити вголос за 20 секунд, refactor уже підозрілий.');
+      if (priority === 'debuggability') explanations.push('Чим простіше спостерігати проміжний state, тим дешевше буде production debugging.');
+
+      verdictList.innerHTML = verdicts.join('');
+      explainList.innerHTML = explanations.map(item => `<li>${item}</li>`).join('');
+    }
+
+    function preset(name) {
+      const map = {
+        'loop-wins': ['single-pass-total', 'loop', 'debuggability'],
+        'hof-fit': ['filter-map', 'hof', 'clarity'],
+        'composition-fit': ['normalize-input', 'composition', 'reuse'],
+        'overcomposed': ['single-pass-total', 'composition', 'clarity']
+      };
+      const [task, style, priority] = map[name];
+      document.getElementById('taskSelect').value = task;
+      document.getElementById('styleSelect').value = style;
+      document.getElementById('prioritySelect').value = priority;
+      analyze();
+    }
+
+    document.getElementById('analyzeBtn').addEventListener('click', analyze);
+    document.getElementById('clearBtn').addEventListener('click', () => preset('hof-fit'));
+    document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => preset(btn.dataset.preset)));
+
+    preset('hof-fit');
+  </script>
+</body>
+</html>
