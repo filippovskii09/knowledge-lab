@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Microtasks vs Macrotasks</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Microtasks vs Macrotasks</h2>
+    <p>Scheduler simulator: why Promise beats setTimeout</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="fn">console.log</span>(<span class="str">"start"</span>);</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="fn">setTimeout</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"timeout"</span>), <span class="val-num">0</span>);</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="fn">queueMicrotask</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"microtask"</span>));</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="fn">Promise.resolve</span>().<span class="fn">then</span>(() <span class="op">=&gt;</span> <span class="fn">console.log</span>(<span class="str">"promise"</span>));</div>
+<div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="fn">console.log</span>(<span class="str">"end"</span>);</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Microtask Queue</div><div id="microtaskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Task Queue</div><div id="taskBox" class="queue"></div></div>
+<div class="panel-box"><div class="panel-title">Current Turn</div><div id="turnBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Drain Rule</div><div id="ruleBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function schedulerState(microtasks, tasks, turn, rule, logs) {
+      renderList('microtaskBox', microtasks);
+      renderList('taskBox', tasks);
+      setText('turnBox', turn);
+      setText('ruleBox', rule);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line1',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Sync Logs First',
+    what: 'start виводиться одразу в поточному task.',
+    why: 'Синхронна частина коду не поступається чергам посеред виконання.',
+    insight: 'Перше правило async order: спочатку закрий sync path.'
+  },
+  action: () => schedulerState([], [], '<span class="status-pill neutral">Global task running</span>', 'tasks wait until current turn ends', ['start'])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Timer Goes to Task Queue Path',
+    what: 'Timer callback буде майбутнім task.',
+    why: 'Timer не є microtask і не може влізти перед promise reactions.',
+    insight: 'Навіть zero-delay timer усе одно живе за правилами task queue.'
+  },
+  action: () => schedulerState([], ['timeout callback'], '<span class="status-pill neutral">Global task running</span>', 'microtasks still empty for now', ['start'])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'queueMicrotask Enqueued',
+    what: 'queueMicrotask додає job у microtask queue.',
+    why: 'Це explicit API для high-priority continuation after current task.',
+    insight: 'Цей callback обжене timer незалежно від timeout delay у цьому прикладі.'
+  },
+  action: () => schedulerState(['microtask callback'], ['timeout callback'], '<span class="status-pill neutral">Global task running</span>', 'microtasks drain before next task', ['start'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['Global'], heap: ['Promise'] },
+  narration: {
+    title: 'Promise Reaction Enqueued',
+    what: 'Promise.then ставить ще одну microtask після queueMicrotask.',
+    why: 'Обидва callbacks житимуть в одній черзі, але збережуть enqueue order.',
+    insight: 'Тут FIFO працює всередині microtask queue, не між різними queue types.'
+  },
+  action: () => schedulerState(['microtask callback', 'promise callback'], ['timeout callback'], '<span class="status-pill neutral">Global task running</span>', 'microtask FIFO inside the same drain cycle', ['start'])
+},
+{
+  codeLine: 'line5',
+  state: { stack: ['Global'], heap: [] },
+  narration: {
+    title: 'Drain Begins',
+    what: 'Після end sync task завершується і runtime переходить до microtasks.',
+    why: 'Це обовʼязкова pause point для event loop scheduling.',
+    insight: 'Саме звідси починається частина, яку більшість розробників помилково називає “магія Promise”.'
+  },
+  action: () => schedulerState(['microtask callback', 'promise callback'], ['timeout callback'], '<span class="status-pill warn">current task ended</span>', 'run all microtasks first', ['start', 'end'])
+},
+{
+  codeLine: 'line3',
+  state: { stack: ['Microtask'], heap: [] },
+  narration: {
+    title: 'First Microtask Runs',
+    what: 'Виконується callback із queueMicrotask.',
+    why: 'Він був поставлений першим у microtask queue.',
+    insight: 'Якщо б він enqueue-ив ще одну microtask, drain продовжився б далі.'
+  },
+  action: () => schedulerState(['microtask callback', 'promise callback'], ['timeout callback'], '<span class="status-pill ok">running first microtask</span>', 'still inside microtask drain', ['start', 'end', 'microtask'])
+},
+{
+  codeLine: 'line4',
+  state: { stack: ['Microtask'], heap: [] },
+  narration: {
+    title: 'Second Microtask Runs',
+    what: 'Promise reaction виконується другою.',
+    why: 'Microtask queue все ще дренується до повного спорожнення.',
+    insight: 'Тільки після цього runtime має право піти в task queue.'
+  },
+  action: () => schedulerState(['promise callback'], ['timeout callback'], '<span class="status-pill ok">running second microtask</span>', 'task queue still waits', ['start', 'end', 'microtask', 'promise'])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Task'], heap: [] },
+  narration: {
+    title: 'Timeout Finally Runs',
+    what: 'Timer callback стає наступним task лише після empty microtask queue.',
+    why: 'Task queue програє пріоритет microtask queue.',
+    insight: 'Порядок: start, end, microtask, promise, timeout.'
+  },
+  action: () => schedulerState([], ['timeout callback'], '<span class="status-pill ok">running task queue callback</span>', 'microtask queue empty', ['start', 'end', 'microtask', 'promise', 'timeout'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
