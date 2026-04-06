@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>[[Call]] vs [[Construct]]</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .var { color: #e06c75; }
+    .str { color: #98c379; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 230px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .call { border-color: #27ae60; background: #eafaf1; }
+    .construct { border-color: #9b59b6; background: #faf5fb; }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>[[Call]] vs [[Construct]]</h2>
+  <p>Покроково: звичайний виклик функції і виклик через <code>new</code> запускають різні внутрішні механізми.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.06;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">User</span>(<span class="var">name</span>) {</div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">this</span>.<span class="var">name</span> <span class="op">=</span> <span class="var">name</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>}</div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="fn">User</span>(<span class="str">"Ada"</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="kw">new</span> <span class="fn">User</span>(<span class="str">"Ada"</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="kw">const</span> <span class="var">sum</span> <span class="op">=</span> (<span class="var">a</span>, <span class="var">b</span>) <span class="op">=&gt;</span> <span class="var">a</span> <span class="op">+</span> <span class="var">b</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="kw">new</span> <span class="var">sum</span>(<span class="num">1</span>, <span class="num">2</span>)<span class="op">;</span></div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-title">Callable Path</div>
+          <div class="card call">
+            <div class="record-table">
+              <div>operation:</div><div id="callOp">-</div>
+              <div>slot:</div><div id="callSlot">-</div>
+              <div>this:</div><div id="callThis">-</div>
+              <div>result:</div><div id="callResult">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Construct Path</div>
+          <div class="card construct">
+            <div class="record-table">
+              <div>operation:</div><div id="constructOp">-</div>
+              <div>slot:</div><div id="constructSlot">-</div>
+              <div>allocated object:</div><div id="constructObj">-</div>
+              <div>result:</div><div id="constructResult">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height:none;min-height:180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Дія (What):</span><span class="js-lab-log-content" id="log-what"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Причина (Why):</span><span class="js-lab-log-content" id="log-why"></span></div>
+          <div class="js-lab-log-item"><span class="js-lab-log-label">Висновок:</span><span class="js-lab-log-content" id="log-insight" style="color:var(--log-accent);font-weight:bold;"></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+    function paint(state) {
+      document.getElementById('callOp').textContent = state.callOp;
+      document.getElementById('callSlot').textContent = state.callSlot;
+      document.getElementById('callThis').textContent = state.callThis;
+      document.getElementById('callResult').textContent = state.callResult;
+      document.getElementById('constructOp').textContent = state.constructOp;
+      document.getElementById('constructSlot').textContent = state.constructSlot;
+      document.getElementById('constructObj').textContent = state.constructObj;
+      document.getElementById('constructResult').textContent = state.constructResult;
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3'],
+          narration: {
+            title: 'Function Object Capabilities',
+            what: 'Оголошено звичайну function `User`, яка може бути викликана звичайно і як constructor.',
+            why: 'Для такого function kind рушій має і callable semantics, і construct semantics.',
+            insight: 'Одна й та сама syntactic function може підтримувати дві різні внутрішні операції.'
+          },
+          action: () => paint({
+            callOp: 'User("Ada") not run yet',
+            callSlot: '[[Call]] available',
+            callThis: '-',
+            callResult: '-',
+            constructOp: 'new User("Ada") not run yet',
+            constructSlot: '[[Construct]] available',
+            constructObj: '-',
+            constructResult: '-'
+          })
+        },
+        {
+          codeLine: 'line5',
+          narration: {
+            title: 'Normal Invocation',
+            what: 'Виклик `User("Ada")` іде через `[[Call]]`.',
+            why: 'Немає `new`, тому construct path не запускається.',
+            insight: 'Саме тут важливо, що plain call не створює instance автоматично.'
+          },
+          action: () => paint({
+            callOp: 'User("Ada")',
+            callSlot: '[[Call]]',
+            callThis: 'call-site dependent',
+            callResult: 'return value / side effects',
+            constructOp: 'new User("Ada") not run yet',
+            constructSlot: '[[Construct]] available',
+            constructObj: '-',
+            constructResult: '-'
+          })
+        },
+        {
+          codeLine: 'line6',
+          narration: {
+            title: 'Construct Invocation',
+            what: 'Виклик `new User("Ada")` іде через `[[Construct]]`.',
+            why: 'Construct semantics спершу allocates object, links prototype, then runs body with `this` set to instance.',
+            insight: 'Це не "той самий виклик плюс синтаксичний префікс", а окремий механізм.'
+          },
+          action: () => paint({
+            callOp: 'User("Ada")',
+            callSlot: '[[Call]]',
+            callThis: 'call-site dependent',
+            callResult: 'return value / side effects',
+            constructOp: 'new User("Ada")',
+            constructSlot: '[[Construct]]',
+            constructObj: '{ [[Prototype]] -> User.prototype }',
+            constructResult: 'instance returned'
+          })
+        },
+        {
+          codeLine: ['line8', 'line9'],
+          narration: {
+            title: 'Arrow Function Limitation',
+            what: 'Arrow function `sum` callable, але не constructable.',
+            why: 'В arrow functions немає `[[Construct]]`, тому `new sum(...)` кидає TypeError.',
+            insight: 'Не кожна function-like сутність підходить для constructor role.'
+          },
+          action: () => paint({
+            callOp: 'sum(1, 2)',
+            callSlot: '[[Call]] only',
+            callThis: 'lexically bound / irrelevant here',
+            callResult: '3',
+            constructOp: 'new sum(1, 2)',
+            constructSlot: 'missing [[Construct]]',
+            constructObj: 'no allocation',
+            constructResult: 'TypeError'
+          })
+        },
+        {
+          codeLine: ['line5', 'line6', 'line9'],
+          narration: {
+            title: 'Mental Model Summary',
+            what: 'Візуалізатор зводить разом три випадки: plain call, construct call, construct failure.',
+            why: 'Це і є core distinction між `[[Call]]` і `[[Construct]]`.',
+            insight: 'Практичне правило: callable ≠ constructable.'
+          },
+          action: () => paint({
+            callOp: 'callable path',
+            callSlot: '[[Call]]',
+            callThis: 'depends on call-site',
+            callResult: 'function execution',
+            constructOp: 'construct path',
+            constructSlot: '[[Construct]] only when present',
+            constructObj: 'allocated for constructors',
+            constructResult: 'instance or TypeError'
+          })
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
