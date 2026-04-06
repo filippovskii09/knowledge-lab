@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>HOF Pipeline Visualizer</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 12px; box-sizing: border-box; }
+    .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; }
+    .pill-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { padding:6px 10px; border-radius:999px; border:1px solid #d7dfe8; background:#fff; font-family:Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header"><h2>HOF Pipeline Visualizer</h2><p>Подивись, як `filter`, `map` і `reduce` змінюють потік даних</p></div>
+  <div class="js-lab-controls"><button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button><div id="stepInfo" class="js-lab-step-info">Крок 1 / 1</div><button id="btnNext" class="js-lab-btn">Далі ►</button></div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> items <span class="op">=</span> [<span class="val-num">1</span>, <span class="val-num">2</span>, <span class="val-num">3</span>, <span class="val-num">4</span>];</div>
+        <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> filtered <span class="op">=</span> items.<span class="fn">filter</span>(n <span class="op">=&gt;</span> n <span class="op">%</span> <span class="val-num">2</span> <span class="op">===</span> <span class="val-num">0</span>);</div>
+        <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">const</span> mapped <span class="op">=</span> filtered.<span class="fn">map</span>(n <span class="op">=&gt;</span> n <span class="op">*</span> <span class="val-num">10</span>);</div>
+        <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="kw">const</span> total <span class="op">=</span> mapped.<span class="fn">reduce</span>((acc, n) <span class="op">=&gt;</span> acc <span class="op">+</span> n, <span class="val-num">0</span>);</div>
+      </div>
+      <div class="js-lab-stack"><div class="js-lab-stack-title">Pipeline State</div><div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;"><div class="panel-box"><div class="panel-title">Current Data</div><div id="dataBox" class="pill-list"></div></div><div class="panel-box"><div class="panel-title">Accumulator</div><div id="accBox"></div></div></div></div>
+    </div>
+    <div class="js-lab-analysis" id="analysis-log"><h3 id="analysis-title">Title</h3><div id="analysis-body" class="log-wrapper fade-in"><div class="js-lab-log-item"><span class="js-lab-log-label">What:</span><span id="log-what"></span></div><div class="js-lab-log-item"><span class="js-lab-log-label">Why:</span><span id="log-why"></span></div><div class="js-lab-log-item"><span class="js-lab-log-label">Insight:</span><span id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span></div></div></div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+    const render = (items, acc='-') => {
+      document.getElementById('dataBox').innerHTML = items.map(item => `<span class="pill">${item}</span>`).join('');
+      document.getElementById('accBox').innerHTML = `<span class="pill">${acc}</span>`;
+    };
+    const config = { steps: [
+      { codeLine: 'line1', narration: { title: 'Input Collection', what: 'Є початковий масив значень.', why: 'Pipeline ще не почався; немає ні selection, ні transform, ні accumulation.', insight: 'Спочатку важливо зрозуміти shape input.' }, action: () => render([1,2,3,4]) },
+      { codeLine: 'line2', narration: { title: 'filter Stage', what: 'Залишаються лише парні елементи.', why: 'Predicate відсікає все, що не проходить умову.', insight: 'filter відповідає за selection, а не за transform.' }, action: () => render([2,4]) },
+      { codeLine: 'line3', narration: { title: 'map Stage', what: 'Кожен елемент трансформується незалежно.', why: 'map зберігає cardinality, але змінює values.', insight: 'map ідеальний для one-to-one transform.' }, action: () => render([20,40]) },
+      { codeLine: 'line4', narration: { title: 'reduce Stage', what: 'Масив згортається в одне значення.', why: 'Reducer комбінує accumulator і current value.', insight: 'reduce корисний, коли результат уже не колекція.' }, action: () => render([20,40], 60) }
+    ]};
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
