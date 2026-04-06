@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Iterator Protocol Walkthrough</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .var { color: #e06c75; }
+    .str { color: #98c379; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 240px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .card.iterable {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .card.iterator {
+      border-color: #9b59b6;
+      background: #faf5fb;
+    }
+
+    .card.loop {
+      border-color: #e67e22;
+      background: #fff4e6;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Symbol.iterator vs for...of</h2>
+  <p>Покроково: `for...of` шукає `Symbol.iterator`, отримує iterator object і далі циклічно викликає `next()` до `done: true`.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.08;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">range</span> <span class="op">=</span> {</div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  *[<span class="fn">Symbol.iterator</span>]() {</div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>    <span class="kw">yield</span> <span class="num">1</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>    <span class="kw">yield</span> <span class="num">2</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  }</div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>}<span class="op">;</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="kw">for</span> (<span class="kw">const</span> <span class="var">value</span> <span class="kw">of</span> <span class="var">range</span>) {</div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">value</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span>}</div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-title">Protocol Objects</div>
+          <div id="iterableCard" class="card iterable">
+            <div class="record-table">
+              <div>iterable:</div><div>`range`</div>
+              <div>hook:</div><div id="iterHook">available</div>
+              <div>state:</div><div id="iterState">ready</div>
+            </div>
+          </div>
+          <div id="iteratorCard" class="card iterator">
+            <div class="record-table">
+              <div>iterator:</div><div id="iteratorRef">not created</div>
+              <div>next():</div><div id="iteratorNext">-</div>
+              <div>result:</div><div id="iteratorResult">-</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Loop State</div>
+          <div id="loopCard" class="card loop">
+            <div class="record-table">
+              <div>current value:</div><div id="loopValue">-</div>
+              <div>logged values:</div><div id="loopLog">[]</div>
+              <div>loop status:</div><div id="loopStatus">not started</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function paint(state) {
+      document.getElementById('iterState').textContent = state.iterState;
+      document.getElementById('iteratorRef').textContent = state.iteratorRef;
+      document.getElementById('iteratorNext').textContent = state.iteratorNext;
+      document.getElementById('iteratorResult').textContent = state.iteratorResult;
+      document.getElementById('loopValue').textContent = state.loopValue;
+      document.getElementById('loopLog').textContent = state.loopLog;
+      document.getElementById('loopStatus').textContent = state.loopStatus;
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3', 'line4', 'line5', 'line6'],
+          narration: {
+            title: 'Iterable Ready',
+            what: 'Маємо object `range`, який визначає `[Symbol.iterator]`.',
+            why: '`for...of` не вимагає Array. Йому потрібен лише iterable protocol hook.',
+            insight: 'Саме `Symbol.iterator` робить object iterable, а не якась "масивоподібність".'
+          },
+          action: () => paint({
+            iterState: 'ready',
+            iteratorRef: 'not created',
+            iteratorNext: '-',
+            iteratorResult: '-',
+            loopValue: '-',
+            loopLog: '[]',
+            loopStatus: 'not started'
+          })
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: 'for...of Starts by Reading Symbol.iterator',
+            what: '`for...of` спершу читає `range[Symbol.iterator]` і викликає цей метод.',
+            why: 'Це перший крок iterator protocol: отримати iterator object із методом `next()`.',
+            insight: 'Language construct делегує поведінку об\'єкту через well-known symbol, а не через hardcoded knowledge про тип.'
+          },
+          action: () => paint({
+            iterState: 'Symbol.iterator called',
+            iteratorRef: '@iterator',
+            iteratorNext: 'ready',
+            iteratorResult: '-',
+            loopValue: '-',
+            loopLog: '[]',
+            loopStatus: 'iterator acquired'
+          })
+        },
+        {
+          codeLine: ['line8', 'line9'],
+          narration: {
+            title: 'First next() Call',
+            what: 'Loop викликає `iterator.next()` і отримує `{ value: 1, done: false }`.',
+            why: 'Поки `done` дорівнює `false`, значення переходить у loop variable і тіло циклу виконується.',
+            insight: 'Результат `next()` — це не просто value, а iterator result object із двома полями: `value` і `done`.'
+          },
+          action: () => paint({
+            iterState: 'consumed',
+            iteratorRef: '@iterator',
+            iteratorNext: 'called #1',
+            iteratorResult: '{ value: 1, done: false }',
+            loopValue: '1',
+            loopLog: '[1]',
+            loopStatus: 'body executed'
+          })
+        },
+        {
+          codeLine: ['line8', 'line9'],
+          narration: {
+            title: 'Second next() Call',
+            what: 'Loop знову викликає `next()` і отримує `{ value: 2, done: false }`.',
+            why: 'Protocol повторюється доти, доки iterator не поверне `done: true`.',
+            insight: 'Саме тому iterator protocol легко узагальнюється: цикл не знає наперед, скільки значень буде.'
+          },
+          action: () => paint({
+            iterState: 'consumed',
+            iteratorRef: '@iterator',
+            iteratorNext: 'called #2',
+            iteratorResult: '{ value: 2, done: false }',
+            loopValue: '2',
+            loopLog: '[1, 2]',
+            loopStatus: 'body executed again'
+          })
+        },
+        {
+          codeLine: 'line10',
+          narration: {
+            title: 'Termination Step',
+            what: 'Наступний виклик `next()` повертає `{ value: undefined, done: true }`.',
+            why: 'Прапорець `done: true` сигналізує `for...of`, що ітерацію треба завершити без нового заходу в тіло циклу.',
+            insight: 'Критичний факт: завершення циклу контролює не сам loop, а iterator result protocol.'
+          },
+          action: () => paint({
+            iterState: 'exhausted',
+            iteratorRef: '@iterator',
+            iteratorNext: 'called #3',
+            iteratorResult: '{ value: undefined, done: true }',
+            loopValue: '-',
+            loopLog: '[1, 2]',
+            loopStatus: 'finished'
+          })
+        },
+        {
+          codeLine: ['line8', 'line9', 'line10'],
+          narration: {
+            title: 'Protocol Summary',
+            what: '`for...of` це синтаксичний шар поверх iterator protocol: get iterator -> call next() -> inspect done -> consume value.',
+            why: 'Розуміння цього пояснює поведінку custom iterables, generators, spread syntax і баги в broken iterators.',
+            insight: 'Коли `for...of` поводиться дивно, треба дебажити не цикл, а iterator object і його `next()` contract.'
+          },
+          action: () => paint({
+            iterState: 'protocol complete',
+            iteratorRef: '@iterator',
+            iteratorNext: '3 calls total',
+            iteratorResult: 'terminated',
+            loopValue: '-',
+            loopLog: '[1, 2]',
+            loopStatus: 'complete'
+          })
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
