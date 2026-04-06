@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Arrow vs Regular: UI Optimized 100vh</title>
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        /* 100vh Layout Architecture */
+        html, body {
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent body scroll */
+            background-color: var(--js-lab-bg, #f8f9fa);
+            font-family: var(--js-lab-font, 'Inter', -apple-system, sans-serif);
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .js-lab-header { flex-shrink: 0; padding: 10px 20px; }
+        .js-lab-controls { flex-shrink: 0; padding: 5px 20px; margin-bottom: 5px; }
+
+        .js-lab-app {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0 20px 10px 20px;
+            gap: 15px;
+        }
+
+        .js-lab-top-row {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            overflow: hidden; /* Contain children */
+            min-height: 0;   /* Crucial for flex nested scrolling */
+        }
+
+        /* Panels */
+        .js-lab-code-wrapper {
+            flex: 0.9;
+            display: flex;
+            flex-direction: column;
+            background: #282c34;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .js-lab-code {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            padding: 20px;
+        }
+
+        .js-lab-stack-column {
+            flex: 1.1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow: hidden;
+        }
+
+        /* Unified Stack/Heap Container Styles */
+        .js-lab-stack {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 15px;
+            border-radius: 8px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .js-lab-stack-container {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+
+        /* Standardized Scrollbar */
+        .js-lab-stack-container::-webkit-scrollbar,
+        .js-lab-code::-webkit-scrollbar { width: 5px; }
+        .js-lab-stack-container::-webkit-scrollbar-track { background: transparent; }
+        .js-lab-stack-container::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 5px; }
+
+        /* Components */
+        .phase-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 8px;
+        }
+        .phase-creation { background: #e8daef; color: #8e44ad; }
+        .phase-execution { background: #d5f5e3; color: #27ae60; }
+
+        .exec-context {
+            border: 3px solid #7f8c8d;
+            border-radius: 8px;
+            padding: 12px;
+            background: #ecf0f1;
+            position: relative;
+            display: none;
+            opacity: 0;
+            animation: slideUp 0.3s ease-out forwards;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+        }
+        .exec-context.visible { display: block; opacity: 1; }
+        .exec-context.active { border-color: #3498db; background: #fff; }
+
+        .ec-title {
+            font-weight: 850;
+            color: #2c3e50;
+            text-transform: uppercase;
+            border-bottom: 2px solid #bdc3c7;
+            padding-bottom: 6px;
+            margin-bottom: 12px;
+            font-size: 11px;
+        }
+
+        .ec-binding-pointer {
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            background: #f8f9fa;
+            padding: 6px 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            border-left: 3px solid #8e44ad;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .lexical-env.attached {
+            border: 2px dashed #3498db;
+            background: #ebf5fb;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        
+        .record-table {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 4px 15px;
+            font-size: 12px;
+        }
+        .record-table > div:first-child { min-width: 80px; font-weight: bold; color: #c678dd; }
+        .this-record-row { background: rgba(241, 196, 15, 0.2); border-radius: 3px; border-left: 3px solid #e67e22; padding-left: 5px; }
+
+        /* Analysis Footer */
+        .js-lab-analysis {
+            flex-shrink: 0;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .lookup-arrow {
+            position: absolute;
+            right: 15px;
+            top: 40%;
+            color: #e67e22;
+            font-weight: bold;
+            font-size: 1.5em;
+            animation: bounceUp 0.6s infinite alternate;
+            display: none;
+        }
+        @keyframes bounceUp { from { transform: translateY(0); } to { transform: translateY(-5px); } }
+
+        .scanner-beam {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 24px;
+            background: rgba(39, 174, 96, 0.1);
+            border-left: 4px solid #27ae60;
+            transition: top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Arrow vs Regular: Механіка This (V8 Spec)</h2>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- CODE -->
+        <div class="js-lab-code-wrapper">
+            <div class="js-lab-code">
+                <div id="scanner" class="scanner-beam"></div>
+                <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">obj</span> <span class="op">=</span> {</div>
+                <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="var">name</span>: <span class="str">'JS Lab'</span>,</div>
+                <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>  <span class="fn">regular</span>() { <span class="com">// (1) Method</span></div>
+                <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>    <span class="fn">console</span>.<span class="fn">log</span>(<span class="kw">this</span>.<span class="var">name</span>);</div>
+                <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span>  },</div>
+                <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span>  <span class="var">arrow</span>: () <span class="op">=></span> { <span class="com">// (2) Arrow Property</span></div>
+                <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span>    <span class="fn">console</span>.<span class="fn">log</span>(<span class="kw">this</span>.<span class="var">name</span>);</div>
+                <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span>  }</div>
+                <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span>};</div>
+                <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span></div>
+                <div class="js-lab-line" id="l11"><span class="js-lab-line-num">11</span><span class="var">obj</span>.<span class="fn">regular</span>();</div>
+                <div class="js-lab-line" id="l12"><span class="js-lab-line-num">12</span><span class="var">obj</span>.<span class="fn">arrow</span>();</div>
+            </div>
+        </div>
+
+        <!-- STACK & HEAP -->
+        <div class="js-lab-stack-column">
+            <!-- Stack -->
+            <div class="js-lab-stack" style="flex: 1.2; border-color: #3498db;">
+                <div style="margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 8px; flex-shrink: 0;">
+                    <span id="badgeCreate" class="phase-badge phase-creation" style="opacity:1;">Creation Phase</span>
+                    <span id="badgeExec" class="phase-badge phase-execution" style="opacity:0.3;">Execution Phase</span>
+                </div>
+                <div class="js-lab-stack-title" style="font-size: 12px; margin-bottom: 8px; flex-shrink: 0;">Execution Context Stack</div>
+                <div id="stack-container" class="js-lab-stack-container"></div>
+            </div>
+            
+            <!-- Heap -->
+            <div class="js-lab-stack" id="heap-container" style="flex: 1; border-color: #e67e22;">
+                <div class="js-lab-stack-title" style="color: #d35400; margin-bottom: 8px; font-size: 12px; flex-shrink: 0;">Memory Heap</div>
+                <div id="heap-content" class="js-lab-stack-container">
+                    <div class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xGlobal <span style="color:#7f8c8d;font-size:10px;">(GlobalObject)</span></div>
+                        <div class="record-table">
+                            <div>window:</div><div class="val-reference">&lt;ref: self&gt;</div>
+                        </div>
+                    </div>
+                    <div class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xObject <span style="color:#7f8c8d;font-size:10px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>name:</div><div class="val-primitive">"JS Lab"</div>
+                            <div>regular:</div><div class="val-reference">&lt;f&gt;</div>
+                            <div>arrow:</div><div class="val-reference">&lt;f&gt;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ANALYSIS -->
+    <div class="js-lab-analysis">
+        <h3 id="analysis-title" style="margin: 0 0 10px 0; font-size: 14px; color: #3498db;">Аналіз Виконання</h3>
+        <div id="analysis-body" class="log-wrapper fade-in" style="font-size: 13px;">
+            <div class="js-lab-log-item"><span class="js-lab-log-label" style="color: #999;">Що (What):</span> <span id="log-what"></span></div>
+            <div class="js-lab-log-item"><span class="js-lab-log-label" style="color: #999;">Чому (Why):</span> <span id="log-why"></span></div>
+            <div class="js-lab-log-item"><span class="js-lab-log-label" style="color: #999;">Висновок:</span> <span id="log-insight" style="color: #27ae60; font-weight: bold;"></span></div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setPhase(phase) {
+        document.getElementById('badgeCreate').style.opacity = (phase === 'create' ? 1 : 0.3);
+        document.getElementById('badgeExec').style.opacity = (phase === 'exec' ? 1 : 0.3);
+    }
+    function scan(line) {
+        const sc = document.getElementById('scanner');
+        if (line === null) { sc.style.opacity = 0; return; }
+        sc.style.opacity = 1;
+        const lineEl = document.getElementById('l' + line);
+        if (lineEl) sc.style.top = (lineEl.offsetTop - 20) + 'px';
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                narration: {
+                    title: "1. Global Context Initialized",
+                    what: "GEC ініціалізовано. Створено Global Env, де лежить об'єкт obj (@0xObject).",
+                    why: "Будь-який код має 'батьківський' GEC. Контекст вказує на своє Лексичне середовище.",
+                    insight: "Розуміння місця створення (Lexical Scoping) є критичним."
+                },
+                action: () => {
+                    setPhase('create'); scan(null);
+                    renderStack([{ name: 'Global', thisVal: '@0xGlobal', outer: 'null' }]);
+                }
+            },
+            {
+                codeLine: 'l11',
+                narration: {
+                    title: "2. Виклик Regular Function",
+                    what: "Виконується obj.regular(). Створено новий Контекст Виконання.",
+                    why: "Виклик через крапку (obj) змушує рушій записати @0xObject у слот [this].",
+                    insight: "Звичайна функція отримує [this] динамічно під час виклику."
+                },
+                action: () => {
+                    setPhase('exec'); scan(11);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'regular()', thisVal: '@0xObject', outer: 'Global Env' }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l4',
+                narration: {
+                    title: "3. Локальне виконання (Regular)",
+                    what: "this.name повертає 'JS Lab', бо [this] вказує на 0xObject.",
+                    why: "Environment Record звичайної функції має власний слот для контексту.",
+                    insight: "Тут все просто: дані лежать безпосередньо у поточному середовищі."
+                },
+                action: () => {
+                    setPhase('exec'); scan(4);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'regular()', thisVal: '@0xObject', outer: 'Global Env', active: true }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l12',
+                narration: {
+                    title: "4. Виклик Arrow Function",
+                    what: "Виконується obj.arrow(). ЕР ПУСТИЙ щодо [this].",
+                    why: "Згідно ES-специфікації, стрілкові функції не створюють власний слот [this].",
+                    insight: "Стрілка — це 'безхатченко' у світі контексту."
+                },
+                action: () => {
+                    setPhase('exec'); scan(12);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'arrow()', thisVal: 'MISSING', outer: 'Global Env', lookup: true }
+                    ]);
+                }
+            },
+            {
+                codeLine: 'l7',
+                narration: {
+                    title: "5. Лексичний Пошук (Resolution)",
+                    what: "Стрілка не знаходить [this] в собі та йде в [[OuterEnv]].",
+                    why: "Вона дивиться на Глобальний Контекст, де була створена.",
+                    insight: "Це звичайний пошук по Scope Chain, такий самий, як для змінних."
+                },
+                action: () => {
+                    setPhase('exec'); scan(7);
+                    renderStack([
+                        { name: 'Global', thisVal: '@0xGlobal', outer: 'null' },
+                        { name: 'arrow()', thisVal: '↳ Global (@0xGlobal)', outer: 'Global Env', active: true }
+                    ]);
+                }
+            }
+        ]
+    };
+
+    function renderStack(frames) {
+        const container = document.getElementById('stack-container');
+        if (!container) return;
+        container.innerHTML = '';
+        [...frames].reverse().forEach(frame => {
+            const div = document.createElement('div');
+            div.className = `exec-context visible ${frame.active ? 'active' : ''}`;
+            div.innerHTML = `
+                <div class="ec-title">${frame.name} Execution Context</div>
+                <div class="ec-binding-pointer">
+                    <span>LexicalEnvironment:</span>
+                    <span style="color:#8e44ad; font-weight:bold;">↳ ${frame.name} Env</span>
+                </div>
+                <div class="lexical-env attached" ${frame.active ? 'style="border-color:#27ae60; background:#e9f7ef;"' : ''}>
+                    <div class="record-zone">
+                        <div style="font-size:10px; font-weight:800; color:#34495e; margin-bottom:5px;">ENVIRONMENT RECORD</div>
+                        <div class="record-table">
+                            <div>[this]:</div>
+                            <div class="${frame.lookup ? '' : 'this-record-row'}">${frame.thisVal}</div>
+                        </div>
+                        ${frame.lookup ? '<div class="lookup-arrow">↑</div>' : ''}
+                    </div>
+                    <div style="margin-top:8px; border-top: 1px dashed #bdc3c7; padding-top:5px; font-size:10px;">
+                        <strong>[[OuterEnv]]:</strong> <span style="color:#e67e22">${frame.outer}</span>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            if (frame.lookup) {
+                setTimeout(() => { 
+                    const arrow = div.querySelector('.lookup-arrow');
+                    if (arrow) arrow.style.display = 'block'; 
+                }, 200);
+            }
+        });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const engine = new JSLabEngine(config);
+        engine.init();
+    });
+</script>
+
+</body>
+</html>
