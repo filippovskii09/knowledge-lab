@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>requestAnimationFrame vs setTimeout</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+
+    <style>
+      .op { color: #56b6c2; }
+      .val-num { color: #d19a66; }
+      .val-str { color: #98c379; }
+      .panel-box { width: 100%; border: 1px solid #d7dfe8; border-radius: 8px; background: #f9fbfc; padding: 10px; box-sizing: border-box; }
+      .panel-title { font-size: 13px; font-weight: bold; text-transform: uppercase; color: #2c3e50; margin-bottom: 8px; letter-spacing: 0.04em; }
+      .panel-value, .console-box, .queue, .lane, .phase-list { font-family: Consolas, monospace; font-size: 14px; }
+      .queue, .lane, .phase-list { display: flex; flex-direction: column; gap: 6px; }
+      .queue-item, .lane-item, .phase-item { padding: 7px 8px; border-radius: 6px; background: #edf2f7; border: 1px solid #d8e1eb; color: #23313f; }
+      .queue-item.active, .lane-item.active, .phase-item.active { background: #d7ecff; border-color: #3498db; color: #0b4f79; font-weight: bold; }
+      .queue-empty { padding: 7px 8px; border-radius: 6px; background: #f1f5f8; border: 1px dashed #c1ccd6; color: #708090; }
+      .console-box { min-height: 60px; display: flex; flex-direction: column; gap: 4px; }
+      .console-line { padding: 4px 6px; background: #1f2933; color: #d9e2ec; border-radius: 4px; }
+      .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-weight: bold; }
+      .ok { background: #d6f5e8; color: #146c43; }
+      .warn { background: #fff3cd; color: #8a6d1f; }
+      .bad { background: #ffe1e1; color: #8b1e1e; }
+      .neutral { background: #e8eef5; color: #415a77; }
+      .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+      .frame { padding: 8px; border-radius: 6px; border: 1px solid #d8e1eb; background: #edf2f7; text-align: center; font-family: Consolas, monospace; }
+      .frame.active { background: #d7ecff; border-color: #3498db; font-weight: bold; }
+    </style>
+
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>requestAnimationFrame vs setTimeout</h2>
+    <p>Frame-aligned scheduling versus delayed task scheduling</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 1</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+<div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">tickWithTimeout</span>() {</div>
+<div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="fn">updatePosition</span>();</div>
+<div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="fn">setTimeout</span>(<span class="fn">tickWithTimeout</span>, <span class="val-num">16</span>);</div>
+<div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>}</div>
+<div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="kw">function</span> <span class="fn">tickWithRAF</span>() {</div>
+<div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>  <span class="fn">updatePosition</span>();</div>
+<div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>  <span class="fn">requestAnimationFrame</span>(<span class="fn">tickWithRAF</span>);</div>
+<div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span>}</div>
+</div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime State</div>
+        <div class="js-lab-stack-container" style="width:100%;max-width:520px;gap:12px;flex-direction:column;">
+<div class="panel-box"><div class="panel-title">Frames</div><div class="timeline"><div id="frame1" class="frame">Frame 1</div><div id="frame2" class="frame">Frame 2</div><div id="frame3" class="frame">Frame 3</div><div id="frame4" class="frame">Frame 4</div></div></div>
+<div class="panel-box"><div class="panel-title">Timeout Lane</div><div id="timeoutLane" class="lane"></div></div>
+<div class="panel-box"><div class="panel-title">rAF Lane</div><div id="rafLane" class="lane"></div></div>
+<div class="panel-box"><div class="panel-title">Visual Result</div><div id="resultBox" class="panel-value"></div></div>
+<div class="panel-box"><div class="panel-title">Console</div><div id="logBox" class="console-box"></div></div>
+</div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis" id="analysis-log">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">What:</span>
+          <span class="js-lab-log-content" id="log-what"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Why:</span>
+          <span class="js-lab-log-content" id="log-why"></span>
+        </div>
+        <div class="js-lab-log-item">
+          <span class="js-lab-log-label">Insight:</span>
+          <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const $ = (id) => document.getElementById(id);
+    function setText(id, value) { $(id).innerHTML = value; }
+    function renderList(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="queue-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function renderConsole(lines) {
+      $('logBox').innerHTML = lines.length
+        ? lines.map((line) => `<div class="console-line">${line}</div>`).join('')
+        : '<div class="queue-empty">(no output yet)</div>';
+    }
+    
+    function setFrames(active) {
+      ['frame1','frame2','frame3','frame4'].forEach((id, index) => $(id).classList.toggle('active', index + 1 === active));
+    }
+    function renderLane(id, items, activeIndex = -1) {
+      $(id).innerHTML = items.length
+        ? items.map((item, index) => `<div class="lane-item ${index === activeIndex ? 'active' : ''}">${item}</div>`).join('')
+        : '<div class="queue-empty">empty</div>';
+    }
+    function frameState(activeFrame, timeoutItems, rafItems, resultText, logs) {
+      setFrames(activeFrame);
+      renderLane('timeoutLane', timeoutItems);
+      renderLane('rafLane', rafItems);
+      setText('resultBox', resultText);
+      renderConsole(logs);
+    }
+
+
+    const config = {
+      steps: [
+        
+{
+  codeLine: 'line3',
+  state: { stack: ['timeout animation'], heap: [] },
+  narration: {
+    title: 'Timeout Schedules a Delayed Task',
+    what: 'setTimeout просить запустити callback не раніше за 16ms.',
+    why: 'Але це task queue scheduling, не frame scheduling.',
+    insight: 'Тут немає гарантії, що callback потрапить прямо перед потрібним paint.'
+  },
+  action: () => frameState(1, ['callback maybe after ~16ms'], ['waiting for next paint'], '<span class="status-pill warn">timeout is delay-based</span>', [])
+},
+{
+  codeLine: 'line7',
+  state: { stack: ['rAF animation'], heap: [] },
+  narration: {
+    title: 'rAF Schedules for Next Paint',
+    what: 'requestAnimationFrame реєструє callback у rendering scheduler.',
+    why: 'Browser викличе його перед наступним repaint.',
+    insight: 'Це і є frame alignment: не приблизний час, а правильна фаза lifecycle.'
+  },
+  action: () => frameState(1, ['callback maybe after ~16ms'], ['callback before paint'], '<span class="status-pill ok">rAF is paint-aligned</span>', [])
+},
+{
+  codeLine: 'line2',
+  state: { stack: ['Frame 2 work'], heap: [] },
+  narration: {
+    title: 'Timeout Drifts Under Load',
+    what: 'Якщо main thread був зайнятий, timeout callback легко зсувається по кадрах.',
+    why: 'Timer ready ще не означає callback right before paint.',
+    insight: 'Саме тут виникає jitter: фактичні інтервали між animation steps нерівномірні.'
+  },
+  action: () => frameState(2, ['late callback in frame 2/3'], ['callback before frame 2 paint'], '<span class="status-pill bad">timeout can drift</span>', ['timeout step maybe late'])
+},
+{
+  codeLine: 'line6',
+  state: { stack: ['Frame 2 rAF'], heap: [] },
+  narration: {
+    title: 'rAF Lands Before Paint',
+    what: 'rAF callback викликається у правильній фазі перед paint.',
+    why: 'Browser сам керує часом виклику в межах render cycle.',
+    insight: 'Навіть тут heavy callback може зіпсувати кадр, але принаймні scheduler уже правильний.'
+  },
+  action: () => frameState(2, ['late callback in frame 2/3'], ['callback before frame 2 paint', 'callback before frame 3 paint'], '<span class="status-pill ok">rAF stays aligned with frames</span>', ['rAF step aligned'])
+},
+{
+  codeLine: 'line7',
+  state: { stack: ['Animation loop'], heap: [] },
+  narration: {
+    title: 'Correct Tool for Visual Work',
+    what: 'rAF формує animation loop за логікою кадрів, а не за логікою delays.',
+    why: 'Visual updates мають бути привʼязані до render lifecycle.',
+    insight: 'Питання не в “16ms”, а в тому, щоб callback потрапив у правильне вікно перед paint.'
+  },
+  action: () => frameState(4, ['jitter risk across frames'], ['frame 2', 'frame 3', 'frame 4'], '<span class="status-pill ok">use rAF for animation, timeout for delayed tasks</span>', ['smoothness depends on scheduler + callback cost'])
+}
+
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
