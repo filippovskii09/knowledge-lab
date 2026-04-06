@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Views on ArrayBuffer</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .op { color: #56b6c2; }
+    .num { color: #d19a66; }
+    .str { color: #98c379; }
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .var { color: #e06c75; }
+    .com { color: #7f8c8d; font-style: italic; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.15fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .memory-panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 240px;
+    }
+
+    .memory-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .buffer-row {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .byte-cell {
+      border: 2px solid #9b59b6;
+      background: #faf5fb;
+      border-radius: 8px;
+      padding: 10px 6px;
+      text-align: center;
+      font-family: monospace;
+      transition: all 0.25s ease;
+    }
+
+    .byte-cell.active {
+      border-color: #e67e22;
+      background: #fff4e6;
+      transform: translateY(-2px);
+    }
+
+    .byte-index {
+      display: block;
+      font-size: 11px;
+      color: #7f8c8d;
+      margin-bottom: 4px;
+    }
+
+    .view-card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .view-card.bytes {
+      border-color: #9b59b6;
+      background: #faf5fb;
+    }
+
+    .view-card.words {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .view-card.data-view {
+      border-color: #e67e22;
+      background: #fff4e6;
+    }
+
+    .card-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      font-family: monospace;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-block;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #f4ecf7;
+      color: #8e44ad;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>One ArrayBuffer, Multiple Views</h2>
+  <p>Покроково: один буфер сирих байтів, кілька views поверх нього, і кожен запис змінює ті самі фізичні bytes.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.05;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">buffer</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">ArrayBuffer</span>(<span class="num">8</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">bytes</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">Uint8Array</span>(<span class="var">buffer</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">const</span> <span class="var">words</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">Uint16Array</span>(<span class="var">buffer</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="kw">const</span> <span class="var">view</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">DataView</span>(<span class="var">buffer</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span></div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="var">bytes</span>[<span class="num">0</span>] <span class="op">=</span> <span class="num">0x34</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="var">bytes</span>[<span class="num">1</span>] <span class="op">=</span> <span class="num">0x12</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="var">words</span>[<span class="num">1</span>] <span class="op">=</span> <span class="num">500</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="var">view</span>.<span class="fn">setUint16</span>(<span class="num">4</span>, <span class="num">0xABCD</span>, <span class="kw">false</span>)<span class="op">;</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="com">// same bytes, different interpretation</span></div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="memory-panel">
+        <div class="memory-title">Raw Buffer Bytes</div>
+        <div class="buffer-row">
+          <div class="byte-cell" id="byte0"><span class="byte-index">0</span><span id="byteVal0">00</span></div>
+          <div class="byte-cell" id="byte1"><span class="byte-index">1</span><span id="byteVal1">00</span></div>
+          <div class="byte-cell" id="byte2"><span class="byte-index">2</span><span id="byteVal2">00</span></div>
+          <div class="byte-cell" id="byte3"><span class="byte-index">3</span><span id="byteVal3">00</span></div>
+          <div class="byte-cell" id="byte4"><span class="byte-index">4</span><span id="byteVal4">00</span></div>
+          <div class="byte-cell" id="byte5"><span class="byte-index">5</span><span id="byteVal5">00</span></div>
+          <div class="byte-cell" id="byte6"><span class="byte-index">6</span><span id="byteVal6">00</span></div>
+          <div class="byte-cell" id="byte7"><span class="byte-index">7</span><span id="byteVal7">00</span></div>
+        </div>
+
+        <div class="view-card bytes">
+          <div class="card-title">Uint8Array View</div>
+          <div class="record-table">
+            <div>bytes[0]:</div><div id="u8_0">0</div>
+            <div>bytes[1]:</div><div id="u8_1">0</div>
+            <div>bytes[4]:</div><div id="u8_4">0</div>
+            <div>bytes[5]:</div><div id="u8_5">0</div>
+          </div>
+        </div>
+
+        <div class="view-card words">
+          <div class="card-title">Uint16Array View</div>
+          <div class="record-table">
+            <div>words[0]:</div><div id="u16_0">0</div>
+            <div>words[1]:</div><div id="u16_1">0</div>
+            <div>note:</div><div><span class="badge">platform-endian view</span></div>
+          </div>
+        </div>
+
+        <div class="view-card data-view">
+          <div class="card-title">DataView Interpretation</div>
+          <div class="record-table">
+            <div>getUint16(0, true):</div><div id="dv_le">0</div>
+            <div>getUint16(0, false):</div><div id="dv_be">0</div>
+            <div>getUint16(4, false):</div><div id="dv_45">0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    const rawBytes = new Uint8Array(8);
+
+    function resetActiveBytes() {
+      for (let i = 0; i < 8; i += 1) {
+        document.getElementById(`byte${i}`).className = 'byte-cell';
+      }
+    }
+
+    function writeBytes(values) {
+      rawBytes.set(values);
+
+      for (let i = 0; i < 8; i += 1) {
+        document.getElementById(`byteVal${i}`).innerText = rawBytes[i]
+          .toString(16)
+          .toUpperCase()
+          .padStart(2, '0');
+      }
+
+      const buffer = rawBytes.buffer.slice(0);
+      const bytes = new Uint8Array(buffer);
+      const words = new Uint16Array(buffer);
+      const view = new DataView(buffer);
+
+      document.getElementById('u8_0').innerText = bytes[0];
+      document.getElementById('u8_1').innerText = bytes[1];
+      document.getElementById('u8_4').innerText = bytes[4];
+      document.getElementById('u8_5').innerText = bytes[5];
+      document.getElementById('u16_0').innerText = words[0];
+      document.getElementById('u16_1').innerText = words[1];
+      document.getElementById('dv_le').innerText = view.getUint16(0, true);
+      document.getElementById('dv_be').innerText = view.getUint16(0, false);
+      document.getElementById('dv_45').innerText = view.getUint16(4, false);
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3', 'line4'],
+          narration: {
+            title: 'Shared Backing Store',
+            what: 'Створено один `ArrayBuffer` і три різні views поверх тих самих 8 байтів.',
+            why: '`Uint8Array`, `Uint16Array` і `DataView` не копіюють дані. Вони лише по-різному інтерпретують один backing store.',
+            insight: 'Це головна ідея binary data у JS: buffer володіє байтами, views визначають, як ці байти читати.'
+          },
+          action: () => {
+            resetActiveBytes();
+            writeBytes([0, 0, 0, 0, 0, 0, 0, 0]);
+          }
+        },
+        {
+          codeLine: 'line6',
+          narration: {
+            title: 'Write via Uint8Array',
+            what: 'У byte offset `0` записано `0x34`.',
+            why: '`Uint8Array` дає прямий доступ по одному байту, що зручно для low-level parsing і protocol work.',
+            insight: 'Коли ви пишете через один view, змінюється не view, а сам спільний buffer.'
+          },
+          action: () => {
+            resetActiveBytes();
+            writeBytes([0x34, 0, 0, 0, 0, 0, 0, 0]);
+            document.getElementById('byte0').classList.add('active');
+          }
+        },
+        {
+          codeLine: 'line7',
+          narration: {
+            title: 'Second Byte Changes Interpretation',
+            what: 'У byte offset `1` записано `0x12`, тож перші два байти тепер утворюють число.',
+            why: 'Той самий набір байтів можна прочитати як два окремі bytes або як одне 16-bit значення.',
+            insight: 'Саме тут важливий endianness: `DataView` дозволяє явно обрати little-endian чи big-endian читання.'
+          },
+          action: () => {
+            resetActiveBytes();
+            writeBytes([0x34, 0x12, 0, 0, 0, 0, 0, 0]);
+            document.getElementById('byte0').classList.add('active');
+            document.getElementById('byte1').classList.add('active');
+          }
+        },
+        {
+          codeLine: 'line8',
+          narration: {
+            title: 'Write via Uint16Array',
+            what: 'Запис `words[1] = 500` змінює bytes з offset `2` до `3` одним 16-bit записом.',
+            why: 'TypedArray працює блоками свого типу: `Uint16Array` оперує двобайтовими елементами.',
+            insight: 'Typed arrays зручні для щільних числових даних, але вони завжди прив’язані до свого element size.'
+          },
+          action: () => {
+            resetActiveBytes();
+            writeBytes([0x34, 0x12, 0xF4, 0x01, 0, 0, 0, 0]);
+            document.getElementById('byte2').classList.add('active');
+            document.getElementById('byte3').classList.add('active');
+          }
+        },
+        {
+          codeLine: 'line9',
+          narration: {
+            title: 'Endian-Controlled Write via DataView',
+            what: '`DataView.setUint16(4, 0xABCD, false)` записує big-endian представлення у bytes `4` і `5`.',
+            why: 'На відміну від `TypedArray`, `DataView` дає контроль над endianness для кожного читання і запису.',
+            insight: 'Для мережевих протоколів, file formats і binary parsing `DataView` зазвичай безпечніший вибір.'
+          },
+          action: () => {
+            resetActiveBytes();
+            writeBytes([0x34, 0x12, 0xF4, 0x01, 0xAB, 0xCD, 0, 0]);
+            document.getElementById('byte4').classList.add('active');
+            document.getElementById('byte5').classList.add('active');
+          }
+        },
+        {
+          codeLine: 'line10',
+          narration: {
+            title: 'Same Bytes, Different Read Models',
+            what: 'Візуалізатор показує один buffer і кілька валідних інтерпретацій тих самих bytes.',
+            why: 'У binary APIs головне не "де лежать дані", а "яким view і з яким endianness ви їх читаєте".',
+            insight: 'Найпоширеніша помилка: думати, що `TypedArray` створює незалежну копію. У типовому сценарії це лише інший погляд на ті самі bytes.'
+          },
+          action: () => {
+            resetActiveBytes();
+            writeBytes([0x34, 0x12, 0xF4, 0x01, 0xAB, 0xCD, 0, 0]);
+          }
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
