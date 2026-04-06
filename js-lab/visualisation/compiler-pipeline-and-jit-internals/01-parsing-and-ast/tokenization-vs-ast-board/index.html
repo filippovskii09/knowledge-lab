@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Tokenization vs AST Board</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>.board{display:grid;grid-template-columns:340px 1fr;gap:20px;flex:1;min-height:0}.panel{background:#fff;border:2px solid var(--color-border);border-radius:8px;padding:16px;overflow:auto}.section-title{margin:0 0 12px 0;color:var(--color-stack);font-size:15px;font-weight:700;text-transform:uppercase}.control-row{margin-bottom:12px}label{display:block;margin-bottom:6px;font-size:13px;font-weight:700;color:#486581}button,select{width:100%;padding:9px 10px;border-radius:6px;border:1px solid #c8d3dd;background:#f8fafc;font-size:14px}.toolbar{display:flex;gap:10px}.toolbar button{border:none;background:var(--color-stack);color:#fff;font-weight:700;cursor:pointer}.toolbar .alt{background:#6c7a89}.code-preview{background:var(--code-bg);color:var(--code-text);border-radius:8px;padding:14px;font-family:Consolas, monospace;white-space:pre-wrap}.explain-list{margin:0;padding-left:20px}@media (max-width:960px){.board{grid-template-columns:1fr}}</style>
+</head>
+<body>
+<div class="js-lab-header"><h2>Tokenization vs AST Board</h2><p>Порівняй плоский token stream і структуроване дерево</p></div>
+<div class="js-lab-app"><div class="board"><div class="panel"><h3 class="section-title">Expression</h3><div class="control-row"><label for="exprSelect">Expression</label><select id="exprSelect"><option value="sum">40 + 2</option><option value="call">sum(1, 2)</option><option value="decl">const x = 1 + 2</option></select></div><div class="toolbar"><button id="analyzeBtn">Analyze</button><button id="clearBtn" class="alt">Reset</button></div></div><div class="panel"><h3 class="section-title">Structure</h3><div id="codePreview" class="code-preview"></div><ol id="explain" class="explain-list"></ol></div></div></div>
+<script type="module">
+import { JSLabEngine } from '../../../core/engine.js'; void JSLabEngine;
+function analyze(){
+  const v=document.getElementById('exprSelect').value;
+  const code=document.getElementById('codePreview');
+  const explain=document.getElementById('explain');
+  let text=''; let notes=[];
+  if(v==='sum'){
+    text=`TOKENS
+[40] [+] [2]
+
+AST
+BinaryExpression
+  left: Literal(40)
+  operator: +
+  right: Literal(2)`;
+  } else if(v==='call'){
+    text=`TOKENS
+[sum] [(] [1] [,] [2] [)]
+
+AST
+CallExpression
+  callee: Identifier(sum)
+  arguments: [Literal(1), Literal(2)]`;
+  } else {
+    text=`TOKENS
+[const] [x] [=] [1] [+] [2] [;]
+
+AST
+VariableDeclaration
+  declarator: x
+  init: BinaryExpression(1 + 2)`;
+  }
+  notes=['Tokens плоскі й локальні.','AST показує вкладеність і роль кожної частини в програмі.','Саме дерево робить подальші execution phases керованими.'];
+  code.textContent=text; explain.innerHTML=notes.map(x=>`<li>${x}</li>`).join('');
+}
+document.getElementById('analyzeBtn').addEventListener('click', analyze);
+document.getElementById('clearBtn').addEventListener('click', ()=>{document.getElementById('exprSelect').value='sum'; analyze();});
+analyze();
+</script>
+</body>
+</html>
