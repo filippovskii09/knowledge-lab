@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Well-Known Symbols in Action</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .kw { color: #c678dd; }
+    .fn { color: #61afef; }
+    .num { color: #d19a66; }
+    .op { color: #56b6c2; }
+    .var { color: #e06c75; }
+    .str { color: #98c379; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .panel {
+      background: #fff;
+      padding: 14px;
+      border-radius: 8px;
+      border: 2px solid var(--color-border);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+      min-height: 220px;
+    }
+
+    .panel-title {
+      font-weight: bold;
+      margin-bottom: 12px;
+      color: var(--color-stack);
+      text-transform: uppercase;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+    }
+
+    .proto-card {
+      border: 2px solid #3498db;
+      background: #ebf5fb;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .proto-card.iter {
+      border-color: #27ae60;
+      background: #eafaf1;
+    }
+
+    .proto-card.instance {
+      border-color: #e67e22;
+      background: #fff4e6;
+    }
+
+    .record-table {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 12px;
+      font-family: monospace;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="js-lab-visualizer"></div>
+  <script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+  <h2>Well-Known Symbols in Action</h2>
+  <p>Покроково: як `Symbol.iterator` і `Symbol.hasInstance` вмикають мовні протоколи для `for...of` та `instanceof`.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 1.05;">
+      <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">class</span> <span class="fn">Range</span> {</div>
+      <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  *[<span class="fn">Symbol.iterator</span>]() {</div>
+      <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>    <span class="kw">yield</span> <span class="num">1</span><span class="op">;</span> <span class="kw">yield</span> <span class="num">2</span><span class="op">;</span> <span class="kw">yield</span> <span class="num">3</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  }</div>
+      <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>}</div>
+      <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+      <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">class</span> <span class="fn">Even</span> {</div>
+      <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span>  <span class="kw">static</span> [<span class="fn">Symbol.hasInstance</span>](<span class="var">value</span>) {</div>
+      <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span>    <span class="kw">return</span> <span class="kw">typeof</span> <span class="var">value</span> <span class="op">===</span> <span class="str">"number"</span> <span class="op">&&</span> <span class="var">value</span> <span class="op">%</span> <span class="num">2</span> <span class="op">===</span> <span class="num">0</span><span class="op">;</span></div>
+      <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span>  }</div>
+      <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span>}</div>
+      <div class="js-lab-line" id="line12"><span class="js-lab-line-num">12</span></div>
+      <div class="js-lab-line" id="line13"><span class="js-lab-line-num">13</span>[...<span class="kw">new</span> <span class="fn">Range</span>()]<span class="op">;</span></div>
+      <div class="js-lab-line" id="line14"><span class="js-lab-line-num">14</span><span class="num">2</span> <span class="kw">instanceof</span> <span class="fn">Even</span><span class="op">;</span></div>
+    </div>
+
+    <div style="flex: 1.35; display: flex; flex-direction: column; gap: 16px;">
+      <div class="grid">
+        <div class="panel">
+          <div class="panel-title">Iterable Protocol</div>
+          <div id="iterCard" class="proto-card">
+            <div class="record-table">
+              <div>hook:</div><div id="iterHook">-</div>
+              <div>consumer:</div><div id="iterConsumer">-</div>
+              <div>result:</div><div id="iterResult">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Instanceof Protocol</div>
+          <div id="instCard" class="proto-card">
+            <div class="record-table">
+              <div>hook:</div><div id="instHook">-</div>
+              <div>expression:</div><div id="instExpr">-</div>
+              <div>result:</div><div id="instResult">-</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="js-lab-analysis" id="analysis-log" style="max-height: none; min-height: 180px;">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Дія (What):</span>
+            <span class="js-lab-log-content" id="log-what"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Причина (Why):</span>
+            <span class="js-lab-log-content" id="log-why"></span>
+          </div>
+          <div class="js-lab-log-item">
+            <span class="js-lab-log-label">Висновок:</span>
+            <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    `;
+
+    function paint(iter, inst, mode) {
+      document.getElementById('iterHook').innerText = iter.hook;
+      document.getElementById('iterConsumer').innerText = iter.consumer;
+      document.getElementById('iterResult').innerText = iter.result;
+      document.getElementById('instHook').innerText = inst.hook;
+      document.getElementById('instExpr').innerText = inst.expr;
+      document.getElementById('instResult').innerText = inst.result;
+      document.getElementById('iterCard').className = `proto-card ${mode === 'iter' ? 'iter' : ''}`.trim();
+      document.getElementById('instCard').className = `proto-card ${mode === 'instance' ? 'instance' : ''}`.trim();
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: ['line1', 'line2', 'line3', 'line4', 'line5'],
+          narration: {
+            title: 'Defining the Iterable Hook',
+            what: 'Клас `Range` оголошує метод `[Symbol.iterator]`.',
+            why: 'Це офіційний hook, який шукають `for...of`, spread і багато стандартних API, коли перевіряють iterable protocol.',
+            insight: 'Well-known symbols — це не просто ключі. Це точки входу в поведінку самої мови.'
+          },
+          action: () => paint(
+            { hook: 'Range[Symbol.iterator]', consumer: '-', result: '-' },
+            { hook: '-', expr: '-', result: '-' },
+            'iter'
+          )
+        },
+        {
+          codeLine: 'line13',
+          narration: {
+            title: 'Spread Uses Symbol.iterator',
+            what: 'Оператор spread намагається отримати iterator через `Symbol.iterator`.',
+            why: 'Spread не "читає масивність" об'єкта. Він читає саме iterable protocol.',
+            insight: 'Тому custom object може поводитись як iterable без успадкування від Array.'
+          },
+          action: () => paint(
+            { hook: 'Range[Symbol.iterator]', consumer: '[...new Range()]', result: '[1, 2, 3]' },
+            { hook: '-', expr: '-', result: '-' },
+            'iter'
+          )
+        },
+        {
+          codeLine: ['line7', 'line8', 'line9', 'line10', 'line11'],
+          narration: {
+            title: 'Defining the instanceof Hook',
+            what: 'Клас `Even` оголошує статичний `[Symbol.hasInstance]`.',
+            why: 'Саме цей hook може перехопити стандартну семантику `instanceof` і замінити її власним правилом.',
+            insight: 'Тут `instanceof` стає не перевіркою prototype chain, а довільним доменним предикатом.'
+          },
+          action: () => paint(
+            { hook: 'Range[Symbol.iterator]', consumer: '[...new Range()]', result: '[1, 2, 3]' },
+            { hook: 'Even[Symbol.hasInstance]', expr: '-', result: '-' },
+            'instance'
+          )
+        },
+        {
+          codeLine: 'line14',
+          narration: {
+            title: 'instanceof Delegates to Symbol.hasInstance',
+            what: 'Вираз `2 instanceof Even` викликає кастомний hook замість звичайної prototype-chain перевірки.',
+            why: 'Якщо об'єкт праворуч має `[Symbol.hasInstance]`, мова дає йому контроль над результатом `instanceof`.',
+            insight: 'Це потужний, але небезпечний механізм: він змінює дуже базову інтуїцію читача коду.'
+          },
+          action: () => paint(
+            { hook: 'Range[Symbol.iterator]', consumer: '[...new Range()]', result: '[1, 2, 3]' },
+            { hook: 'Even[Symbol.hasInstance]', expr: '2 instanceof Even', result: 'true' },
+            'instance'
+          )
+        },
+        {
+          codeLine: ['line13', 'line14'],
+          narration: {
+            title: 'Protocol Hooks, Not Random Properties',
+            what: 'Ми побачили дві різні мовні операції, які читають спеціальні well-known symbols.',
+            why: 'Одна і та сама ідея повторюється по всій мові: об\'єкт може підключитись до стандартного протоколу через predefined symbol key.',
+            insight: 'Саме тому `Symbol.iterator`, `Symbol.toPrimitive`, `Symbol.hasInstance`, `Symbol.toStringTag` варто вчити як набір протоколів, а не як список екзотичних API.'
+          },
+          action: () => paint(
+            { hook: 'Range[Symbol.iterator]', consumer: '[...new Range()]', result: '[1, 2, 3]' },
+            { hook: 'Even[Symbol.hasInstance]', expr: '2 instanceof Even', result: 'true' },
+            ''
+          )
+        }
+      ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+  </script>
+</body>
+</html>
