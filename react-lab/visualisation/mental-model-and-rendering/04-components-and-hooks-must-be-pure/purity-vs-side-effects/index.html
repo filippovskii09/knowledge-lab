@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Purity vs Side Effects</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .purity-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+    .mode {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.25s ease;
+      min-height: 240px;
+    }
+    .mode.active {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      border-color: #3498db;
+    }
+    .mode h4 { margin: 0 0 8px 0; color: #2c3e50; }
+    .counter {
+      font-size: 34px;
+      font-weight: 800;
+      color: #2c3e50;
+      margin: 12px 0;
+    }
+    .log {
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #f8fafb;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      min-height: 96px;
+    }
+    .bad { color: #c0392b; }
+    .good { color: #1e8449; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Components and Hooks Must Be Pure</h2>
+    <p>Однакові inputs мають давати однаковий render output без side effects.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">nextId</span> <span class="op">=</span> 0;</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span></div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span><span class="kw">function</span> <span class="fn">Row</span>() {</div>
+        <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>  <span class="var">nextId</span><span class="op">++</span>;</div>
+        <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span>  <span class="kw">return</span> <span class="op">&lt;</span><span class="fn">div</span><span class="op">&gt;</span>{<span class="var">nextId</span>}<span class="op">&lt;/</span><span class="fn">div</span><span class="op">&gt;</span>;</div>
+        <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Render Safety</div>
+        <div class="purity-grid">
+          <div class="mode" id="pure-mode">
+            <h4>Pure Render</h4>
+            <div class="counter good" id="pure-value">same inputs -> same output</div>
+            <div class="log" id="pure-log">Render only computes JSX.</div>
+          </div>
+          <div class="mode" id="impure-mode">
+            <h4>Impure Render</h4>
+            <div class="counter bad" id="impure-value">nextId = 0</div>
+            <div class="log" id="impure-log">No mutation yet.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    function activate(modeId) {
+      ['pure-mode', 'impure-mode'].forEach((id) => document.getElementById(id).classList.toggle('active', id === modeId));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l3',
+          action: () => {
+            activate('pure-mode');
+            document.getElementById('impure-value').textContent = 'nextId = 0';
+            document.getElementById('impure-log').textContent = 'No mutation yet.';
+          },
+          narration: {
+            title: '1. Pure render is replay-safe',
+            what: 'Чистий компонент лише обчислює UI description зі своїх входів.',
+            why: 'React має мати право повторити render без зміни зовнішнього світу.',
+            insight: 'Purity в React потрібна не для краси, а для безпечного orchestration.'
+          }
+        },
+        {
+          codeLine: 'l4',
+          action: () => {
+            activate('impure-mode');
+            document.getElementById('impure-value').textContent = 'nextId = 1';
+            document.getElementById('impure-log').textContent = 'First render mutated a shared module-level value.';
+          },
+          narration: {
+            title: '2. Impure render mutates shared state',
+            what: 'Компонент змінює `nextId` прямо під час render.',
+            why: 'Це порушує правило no side effects / no shared mutation during render.',
+            insight: 'Проблема не в інкременті як такому, а в тому, що його ефект переживає render call.'
+          }
+        },
+        {
+          codeLine: 'l4',
+          action: () => {
+            activate('impure-mode');
+            document.getElementById('impure-value').textContent = 'nextId = 2';
+            document.getElementById('impure-log').textContent = 'Strict Mode replay or repeated render increments again.';
+          },
+          narration: {
+            title: '3. Replay exposes the impurity',
+            what: 'Повторний render дає інший результат за тих самих входів.',
+            why: 'Idempotency зламана: однаковий input більше не дає однаковий output.',
+            insight: 'Strict Mode тут не створює баг, а виводить його на поверхню.'
+          }
+        },
+        {
+          codeLine: 'l5',
+          action: () => {
+            activate('pure-mode');
+            document.getElementById('pure-log').textContent = 'Correct model: derive visible data from props/state, not from shared mutation.';
+          },
+          narration: {
+            title: '4. Pure path derives output from inputs only',
+            what: 'Правильний компонент не повинен накопичувати прихований стан через module variables.',
+            why: 'React state і props already provide the correct reactive inputs.',
+            insight: 'Render body не місце для persistence або counters; для цього є state, refs, effects або event flow.'
+          }
+        },
+        {
+          codeLine: 'l3',
+          action: () => {
+            activate('pure-mode');
+            document.getElementById('impure-log').textContent = 'Bug pattern: shared mutation during render.';
+          },
+          narration: {
+            title: '5. Purity is a runtime contract',
+            what: 'Render logic має бути безпечним для повторного запуску та скасування.',
+            why: 'Без цього React не може вільно оптимізувати rendering model.',
+            insight: 'Коли компонент pure, React отримує свободу; коли impure, ти сам себе прив\'язуєш до крихких timing assumptions.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
