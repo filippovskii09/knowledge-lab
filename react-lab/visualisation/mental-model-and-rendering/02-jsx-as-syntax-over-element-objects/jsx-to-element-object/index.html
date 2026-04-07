@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>JSX to Element Object</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .transform-board {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+    }
+    .panel {
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      background: #fff;
+      padding: 14px;
+      min-height: 220px;
+      transition: all 0.25s ease;
+    }
+    .panel.active {
+      border-color: #3498db;
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      transform: translateY(-3px);
+    }
+    .panel h4 {
+      margin: 0 0 10px 0;
+      color: #2c3e50;
+    }
+    pre {
+      margin: 0;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+    .field {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #eff3f6;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+    .field:last-child { border-bottom: none; }
+    .field strong { color: #34495e; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>JSX as Syntax Over Element Objects</h2>
+    <p>JSX -> transform -> React element object. DOM тут ще не існує.</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">App</span>() {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">return</span> <span class="op">&lt;</span><span class="fn">Button</span> <span class="var">kind</span><span class="op">=</span><span class="str">"primary"</span><span class="op">&gt;</span><span class="str">Save</span><span class="op">&lt;/</span><span class="fn">Button</span><span class="op">&gt;</span>;</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">JSX Transform</div>
+        <div class="transform-board">
+          <div class="panel" id="p-jsx">
+            <h4>1. JSX</h4>
+            <pre>&lt;Button kind="primary"&gt;
+  Save
+&lt;/Button&gt;</pre>
+          </div>
+          <div class="panel" id="p-call">
+            <h4>2. Runtime Call</h4>
+            <pre id="call-box">jsx(Button, { kind: "primary", children: "Save" })</pre>
+          </div>
+          <div class="panel" id="p-object">
+            <h4>3. Element Object</h4>
+            <div class="field"><strong>type</strong><span id="f-type">Button</span></div>
+            <div class="field"><strong>props</strong><span id="f-props">{ kind: "primary", children: "Save" }</span></div>
+            <div class="field"><strong>key</strong><span id="f-key">null</span></div>
+            <div class="field"><strong>DOM?</strong><span id="f-dom">Ще ні</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    const panels = ['p-jsx', 'p-call', 'p-object'];
+    function activate(id) {
+      panels.forEach((panelId) => document.getElementById(panelId).classList.toggle('active', panelId === id));
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: 'l2',
+          action: () => activate('p-jsx'),
+          narration: {
+            title: '1. JSX is source syntax',
+            what: 'У коді ти бачиш майже HTML-подібний запис, але це ще не DOM і не browser HTML parser.',
+            why: 'JSX спрощує читання декларативного дерева, але сам по собі не є runtime structure.',
+            insight: 'Найкраща mental model: JSX це компактний спосіб написати element description.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('p-call'),
+          narration: {
+            title: '2. JSX is compiled to runtime calls',
+            what: 'Toolchain перетворює JSX у виклик `jsx(...)` або legacy `createElement(...)`.',
+            why: 'React runtime працює не з сирим JSX, а з уже зібраними element objects.',
+            insight: 'JSX не магія браузера; це частина build pipeline.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('p-object');
+            document.getElementById('f-dom').textContent = 'Ще ні, це лише description';
+          },
+          narration: {
+            title: '3. The result is an element object',
+            what: 'Виклик повертає immutable object із `type`, `props`, `key` та іншими внутрішніми полями.',
+            why: 'React треба відокремити опис UI від реального host instance.',
+            insight: 'Element object існує на рівні React model, а не DOM API.'
+          }
+        },
+        {
+          codeLine: 'l1',
+          action: () => {
+            activate('p-object');
+            document.getElementById('f-dom').textContent = 'DOM з\'явиться лише на commit phase';
+          },
+          narration: {
+            title: '4. DOM comes later, during commit',
+            what: 'Навіть після створення element object жоден реальний `<button>` ще не створений.',
+            why: 'Спочатку React має обчислити дерево, а host nodes створюються лише під час commit.',
+            insight: 'Саме це розділення дозволяє React бути tree runtime, а не просто thin wrapper над `document.createElement`.'
+          }
+        }
+      ]
+    };
+
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
