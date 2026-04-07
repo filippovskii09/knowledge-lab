@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Strict Mode Probe</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .probe-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+    }
+    .probe {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 240px;
+      transition: all 0.25s ease;
+    }
+    .probe.active {
+      border-color: #3498db;
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      transform: translateY(-4px);
+    }
+    .probe h4 { margin: 0 0 10px 0; color: #2c3e50; }
+    .meter {
+      font-size: 32px;
+      font-weight: 800;
+      color: #2c3e50;
+      margin: 10px 0;
+    }
+    .desc {
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      background: #f8fafb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Strict Mode Probe</h2>
+    <p>Development-only replay виявляє impurity і missing cleanup.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="op">&lt;</span><span class="fn">StrictMode</span><span class="op">&gt;</span></div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="op">&lt;</span><span class="fn">App</span> <span class="op">/&gt;</span></div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span><span class="op">&lt;/</span><span class="fn">StrictMode</span><span class="op">&gt;</span></div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Development Probe</div>
+        <div class="probe-grid">
+          <div class="probe" id="p-render">
+            <h4>Render Replay</h4>
+            <div class="meter" id="m-render">1x</div>
+            <div class="desc">Render path count in dev.</div>
+          </div>
+          <div class="probe" id="p-effect">
+            <h4>Effect Cleanup Check</h4>
+            <div class="meter" id="m-effect">setup</div>
+            <div class="desc">Effect setup/cleanup discipline.</div>
+          </div>
+          <div class="probe" id="p-bug">
+            <h4>Bug Exposure</h4>
+            <div class="meter" id="m-bug">hidden</div>
+            <div class="desc">Impurity or missing cleanup becomes visible.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    function activate(id) {
+      ['p-render', 'p-effect', 'p-bug'].forEach((probeId) => document.getElementById(probeId).classList.toggle('active', probeId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l1',
+          action: () => {
+            activate('p-render');
+            document.getElementById('m-render').textContent = '1x';
+            document.getElementById('m-effect').textContent = 'setup';
+            document.getElementById('m-bug').textContent = 'hidden';
+          },
+          narration: {
+            title: '1. Strict Mode wraps the subtree in development checks',
+            what: 'React позначає цей subtree як такий, що має пройти додаткові dev probes.',
+            why: 'Мета не змінити production semantics, а знайти код, який не відповідає runtime contract.',
+            insight: 'Strict Mode це діагностичний стенд, а не production feature toggle.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('p-render');
+            document.getElementById('m-render').textContent = '2x';
+          },
+          narration: {
+            title: '2. Render replay can happen in development',
+            what: 'Render paths можуть виконуватися додатково, щоб виявити impurity.',
+            why: 'Якщо repeated render ламає логіку, проблема вже існує в компоненті.',
+            insight: 'Подвійний dev render не означає подвійний production commit.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('p-effect');
+            document.getElementById('m-effect').textContent = 'setup -> cleanup -> setup';
+          },
+          narration: {
+            title: '3. Effects are stress-tested for cleanup discipline',
+            what: 'Strict Mode сильніше підсвічує відсутній або некоректний cleanup.',
+            why: 'Effects повинні бути безпечними до повторного setup/teardown в development checks.',
+            insight: 'Багато subscription leaks стають очевидними саме тут.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('p-bug');
+            document.getElementById('m-bug').textContent = 'visible';
+          },
+          narration: {
+            title: '4. The hidden bug becomes visible',
+            what: 'Shared mutation, duplicate subscriptions або assumptions про “run once” виходять назовні.',
+            why: 'Strict Mode навмисно тисне на слабкі місця render/effect logic.',
+            insight: 'Не борись із Strict Mode; використовуй його як ранній fault detector.'
+          }
+        },
+        {
+          codeLine: 'l1',
+          action: () => activate('p-bug'),
+          narration: {
+            title: '5. Strict Mode is a contract verifier',
+            what: 'Він перевіряє, чи код витримує сучасну React model: purity, replay safety, cleanup safety.',
+            why: 'React потребує цих властивостей для коректного rendering behavior і future-friendly architecture.',
+            insight: 'Якщо код проходить Strict Mode cleanly, його mental model значно ближча до правильної.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
