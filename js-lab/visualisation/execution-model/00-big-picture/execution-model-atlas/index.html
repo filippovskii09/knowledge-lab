@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Execution Model Atlas</title>
+  <link rel="stylesheet" href="../../../core/theme.css">
+  <style>
+    .atlas {
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 16px;
+      width: 100%;
+      height: 100%;
+    }
+    .topic-map {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      overflow-y: auto;
+    }
+    .topic-card {
+      background: #fff;
+      border: 2px solid #d7dee8;
+      border-radius: 12px;
+      padding: 12px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+    .topic-card.active {
+      border-color: #3498db;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 22px rgba(52, 152, 219, 0.18);
+    }
+    .topic-title {
+      font-weight: 800;
+      color: #2c3e50;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+    .topic-human {
+      color: #8e44ad;
+      font-weight: 700;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .topic-why {
+      color: #566573;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .runtime-stage {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .runtime-box {
+      min-height: 150px;
+      background: #fff;
+      border: 2px solid #d7dee8;
+      border-radius: 12px;
+      padding: 12px;
+      transition: all 0.25s ease;
+    }
+    .runtime-box.active {
+      border-color: #27ae60;
+      box-shadow: 0 10px 22px rgba(39, 174, 96, 0.16);
+      transform: translateY(-2px);
+    }
+    .runtime-box h4 {
+      margin: 0 0 8px 0;
+      color: #2c3e50;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .runtime-list {
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      color: #34495e;
+      white-space: pre-line;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #eef4fb;
+      color: #2c3e50;
+      font-size: 11px;
+      font-weight: 800;
+      margin: 0 6px 6px 0;
+    }
+    .arrow-note {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      background: #f8fafb;
+      border-left: 4px solid #3498db;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #34495e;
+    }
+  </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+  <h2>Execution Model Atlas</h2>
+  <p>Поверхнева карта всього блоку: підготовка bindings, scope, stack, closure, this і arrow functions.</p>
+</div>
+
+<div class="js-lab-controls">
+  <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+  <div class="js-lab-step-info" id="stepInfo">Крок 1 / 8</div>
+  <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+  <div class="js-lab-top-row">
+    <div class="js-lab-code" style="flex: 0.95;">
+      <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> <span class="str">"Artur"</span>;</div>
+      <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span></div>
+      <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span><span class="kw">function</span> <span class="fn">createGreeter</span>(<span class="var">prefix</span>) {</div>
+      <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>  <span class="kw">const</span> <span class="var">label</span> <span class="op">=</span> <span class="str">"student"</span>;</div>
+      <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span></div>
+      <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span>  <span class="kw">return</span> <span class="kw">function</span> <span class="fn">greet</span>() {</div>
+      <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span>    <span class="fn">console</span>.<span class="fn">log</span>(<span class="kw">this</span>.<span class="var">name</span>, <span class="var">prefix</span>, <span class="var">user</span>, <span class="var">label</span>);</div>
+      <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span>  };</div>
+      <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span>}</div>
+      <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span></div>
+      <div class="js-lab-line" id="l11"><span class="js-lab-line-num">11</span><span class="kw">const</span> <span class="var">person</span> <span class="op">=</span> { <span class="var">name</span>: <span class="str">"A"</span>, <span class="var">greet</span>: <span class="fn">createGreeter</span>(<span class="str">"hi"</span>) };</div>
+      <div class="js-lab-line" id="l12"><span class="js-lab-line-num">12</span><span class="var">person</span>.<span class="fn">greet</span>();</div>
+      <div class="js-lab-line" id="l13"><span class="js-lab-line-num">13</span></div>
+      <div class="js-lab-line" id="l14"><span class="js-lab-line-num">14</span><span class="com">// Variant:</span></div>
+      <div class="js-lab-line" id="l15"><span class="js-lab-line-num">15</span><span class="com">// return () =&gt; console.log(this.name, prefix, user, label);</span></div>
+    </div>
+
+    <div class="js-lab-stack" style="flex: 1.7;">
+      <div class="atlas">
+        <div class="topic-map">
+          <div class="topic-card" id="topic-decl">
+            <div class="topic-title">01. Declaration Instantiation</div>
+            <div class="topic-human">Людська назва: підготовка bindings</div>
+            <div class="topic-why">Навіщо: hoisting, TDZ, `undefined`, function declarations.</div>
+          </div>
+          <div class="topic-card" id="topic-lex">
+            <div class="topic-title">02. Lexical Environment</div>
+            <div class="topic-human">Людська назва: таблиця імен + OuterEnv</div>
+            <div class="topic-why">Навіщо: scope chain, closures, block scope, shadowing.</div>
+          </div>
+          <div class="topic-card" id="topic-stack">
+            <div class="topic-title">03. Execution Context Stack</div>
+            <div class="topic-human">Людська назва: хто зараз виконується</div>
+            <div class="topic-why">Навіщо: порядок викликів, nested calls, recursion.</div>
+          </div>
+          <div class="topic-card" id="topic-this">
+            <div class="topic-title">04. This Binding</div>
+            <div class="topic-human">Людська назва: receiver поточного виклику</div>
+            <div class="topic-why">Навіщо: `obj.method()`, detached methods, `call/apply/bind`, `new`.</div>
+          </div>
+          <div class="topic-card" id="topic-arrow">
+            <div class="topic-title">05. Arrow vs Regular</div>
+            <div class="topic-human">Людська назва: чи є власний `this`</div>
+            <div class="topic-why">Навіщо: callbacks, methods, event handlers, lexical this.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="runtime-stage">
+            <div class="runtime-box" id="box-bindings">
+              <h4>Bindings</h4>
+              <span class="badge">before execution</span>
+              <div class="runtime-list" id="bindings-list">Not prepared yet.</div>
+            </div>
+            <div class="runtime-box" id="box-stack">
+              <h4>Call Stack</h4>
+              <span class="badge">control flow</span>
+              <div class="runtime-list" id="stack-list">Empty visual model.</div>
+            </div>
+            <div class="runtime-box" id="box-env">
+              <h4>Lexical Environments</h4>
+              <span class="badge">scope chain</span>
+              <div class="runtime-list" id="env-list">No environments shown yet.</div>
+            </div>
+            <div class="runtime-box" id="box-this">
+              <h4>This / Function Kind</h4>
+              <span class="badge">call-site</span>
+              <div class="runtime-list" id="this-list">No call-site analyzed yet.</div>
+            </div>
+          </div>
+          <div class="arrow-note" id="note">
+            Ця карта спеціально поверхнева: її мета — показати, навіщо існує кожна тема, а не замінити deep dive.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="js-lab-analysis" id="analysis-log">
+    <h3 id="analysis-title">Title</h3>
+    <div id="analysis-body" class="log-wrapper fade-in">
+      <div class="js-lab-log-item">
+        <span class="js-lab-log-label">Що:</span>
+        <span class="js-lab-log-content" id="log-what"></span>
+      </div>
+      <div class="js-lab-log-item">
+        <span class="js-lab-log-label">Чому:</span>
+        <span class="js-lab-log-content" id="log-why"></span>
+      </div>
+      <div class="js-lab-log-item">
+        <span class="js-lab-log-label">Інсайт:</span>
+        <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { JSLabEngine } from '../../../core/engine.js';
+
+  const topics = ['topic-decl', 'topic-lex', 'topic-stack', 'topic-this', 'topic-arrow'];
+  const boxes = ['box-bindings', 'box-stack', 'box-env', 'box-this'];
+
+  function activate(topicIds, boxIds) {
+    topics.forEach((id) => document.getElementById(id).classList.toggle('active', topicIds.includes(id)));
+    boxes.forEach((id) => document.getElementById(id).classList.toggle('active', boxIds.includes(id)));
+  }
+
+  function setText(id, text) {
+    document.getElementById(id).textContent = text;
+  }
+
+  const config = {
+    steps: [
+      {
+        codeLine: null,
+        action: () => {
+          activate([], []);
+          setText('bindings-list', 'Not prepared yet.');
+          setText('stack-list', 'Empty visual model.');
+          setText('env-list', 'No environments shown yet.');
+          setText('this-list', 'No call-site analyzed yet.');
+          setText('note', 'Ця карта спеціально поверхнева: її мета — показати, навіщо існує кожна тема, а не замінити deep dive.');
+        },
+        narration: {
+          title: '0. Orientation: one mechanism, five lenses',
+          what: 'Execution Model не треба вчити як набір випадкових термінів. Це одна історія про підготовку, scope, stack, closure і this.',
+          why: 'Коли є карта, deep dive теми перестають бути ізольованими.',
+          insight: 'Спочатку вивчи роль механізму, потім його офіційну назву.'
+        }
+      },
+      {
+        codeLine: 'l1',
+        action: () => {
+          activate(['topic-decl'], ['box-bindings']);
+          setText('bindings-list', 'user: binding created, TDZ until initialization\ncreateGreeter: function declaration binding\nperson: binding created, TDZ until initialization');
+          setText('stack-list', 'Global code has not started executing business logic yet.');
+          setText('env-list', 'Global Lexical Environment is being prepared.');
+          setText('this-list', 'No function call-site yet.');
+          setText('note', 'Declaration Instantiation відповідає на питання: чому імена вже існують до виконання рядків, але поводяться по-різному?');
+        },
+        narration: {
+          title: '1. JS prepares declarations before execution',
+          what: 'Рушій створює bindings для `user`, `createGreeter` і `person` ще до виконання рядків.',
+          why: 'Саме це пояснює hoisting, TDZ і різницю між function declaration, `var`, `let` та `const`.',
+          insight: 'Людська назва: підготовка bindings перед execution.'
+        }
+      },
+      {
+        codeLine: 'l1',
+        action: () => {
+          activate(['topic-lex'], ['box-env', 'box-bindings']);
+          setText('bindings-list', 'user initialized -> "Artur"\ncreateGreeter -> function object\nperson still waits until line 11');
+          setText('env-list', 'Global Lexical Environment\nEnvironment Record:\n  user -> "Artur"\n  createGreeter -> <function>\nOuterEnv -> null');
+          setText('stack-list', 'Global Execution Context is active.');
+          setText('this-list', 'Global this depends on environment/module mode; not the focus here.');
+          setText('note', 'Lexical Environment відповідає на питання: де живуть імена і куди йти, якщо локально імені немає?');
+        },
+        narration: {
+          title: '2. Global Lexical Environment stores global names',
+          what: '`user` і `createGreeter` отримують місце в Global Lexical Environment.',
+          why: 'Будь-який пошук імені починається з поточного environment і може підніматися через `[[OuterEnv]]`.',
+          insight: 'Людська назва: таблиця імен + посилання на батьківський scope.'
+        }
+      },
+      {
+        codeLine: 'l11',
+        action: () => {
+          activate(['topic-stack'], ['box-stack', 'box-env']);
+          setText('stack-list', 'Top: createGreeter("hi") Execution Context\nBelow: Global Execution Context');
+          setText('env-list', 'createGreeter Lexical Environment\n  prefix -> "hi"\nOuterEnv -> Global Lexical Environment');
+          setText('bindings-list', 'person initialization is waiting for createGreeter("hi") to return.');
+          setText('this-list', '`this` inside createGreeter is not important for this example.');
+          setText('note', 'Execution Context Stack відповідає на питання: який код зараз реально виконується і куди повернутися після return?');
+        },
+        narration: {
+          title: '3. Function call creates a new Execution Context',
+          what: 'Виклик `createGreeter("hi")` додає function context на верхівку stack.',
+          why: 'JavaScript має зберегти, де зупинився global code, і виконати function body окремо.',
+          insight: 'Не плутай call stack зі scope chain: stack це порядок виконання, scope chain це пошук імен.'
+        }
+      },
+      {
+        codeLine: 'l4',
+        action: () => {
+          activate(['topic-lex'], ['box-env']);
+          setText('env-list', 'createGreeter Lexical Environment\n  prefix -> "hi"\n  label -> "student"\nOuterEnv -> Global Lexical Environment');
+          setText('stack-list', 'Top: createGreeter("hi")\nBelow: Global');
+          setText('bindings-list', 'Local bindings are initialized during function execution.');
+          setText('this-list', 'No method call-site yet.');
+          setText('note', '`prefix` і `label` не глобальні. Вони живуть у environment конкретного виклику `createGreeter("hi")`.');
+        },
+        narration: {
+          title: '4. Function Lexical Environment stores parameters and locals',
+          what: '`prefix` і `label` живуть у Lexical Environment виклику `createGreeter`.',
+          why: 'Цей environment має власний Environment Record і OuterEnv на global scope.',
+          insight: 'Саме цей шар пізніше пояснить closure.'
+        }
+      },
+      {
+        codeLine: 'l6',
+        action: () => {
+          activate(['topic-lex'], ['box-env', 'box-stack']);
+          setText('stack-list', 'createGreeter returns -> its Execution Context will leave stack\nGlobal continues line 11');
+          setText('env-list', 'Returned function greet has [[Environment]] -> createGreeter Lexical Environment\nSo prefix and label remain reachable.');
+          setText('bindings-list', 'person.greet receives returned function object.');
+          setText('this-list', 'Still no `this` binding for greet until greet is called.');
+          setText('note', 'Closure не “копіює” змінні. Function object тримає reference на environment, який лишається reachable.');
+        },
+        narration: {
+          title: '5. Returned function keeps the old environment alive',
+          what: '`greet` повертається з `createGreeter`, але зберігає доступ до `prefix` і `label`.',
+          why: 'Function object має внутрішнє посилання `[[Environment]]` на lexical environment, де була створена.',
+          insight: 'Closure це частина Lexical Environment story, а не окрема магія.'
+        }
+      },
+      {
+        codeLine: 'l12',
+        action: () => {
+          activate(['topic-this', 'topic-lex', 'topic-stack'], ['box-this', 'box-env', 'box-stack']);
+          setText('stack-list', 'Top: greet() Execution Context\nBelow: Global Execution Context');
+          setText('env-list', 'greet local env -> createGreeter env -> Global env\nFind prefix -> "hi"\nFind label -> "student"\nFind user -> "Artur"');
+          setText('bindings-list', 'person is initialized with name and greet.');
+          setText('this-list', 'Call-site: person.greet()\nReceiver: person\nthis.name -> "A"');
+          setText('note', '`this.name` і `prefix/user/label` приходять з різних механізмів: `this` з call-site, імена зі scope chain.');
+        },
+        narration: {
+          title: '6. Method call defines this; lexical chain resolves names',
+          what: '`person.greet()` викликає `greet` з receiver `person`, а `prefix`, `user`, `label` шукаються по lexical chain.',
+          why: '`this` не шукається через `[[OuterEnv]]`; це окремий binding, який залежить від способу виклику regular function.',
+          insight: 'Один рядок коду може одночасно використовувати call stack, scope chain, closure і this binding.'
+        }
+      },
+      {
+        codeLine: 'l15',
+        action: () => {
+          activate(['topic-arrow', 'topic-this'], ['box-this']);
+          setText('this-list', 'If greet were arrow:\n  no own this binding\n  person.greet() could not set this for it\n  this would be taken lexically from creation scope');
+          setText('env-list', 'Lexical lookup for prefix/user/label would still work.');
+          setText('stack-list', 'Function call still happens, but this behavior changes.');
+          setText('bindings-list', 'No binding preparation difference that matters for this variant.');
+          setText('note', 'Arrow vs Regular це не “коротший синтаксис”. Це різна модель `this`.');
+        },
+        narration: {
+          title: '7. Arrow function changes the this story',
+          what: 'Якби `greet` була arrow function, `person.greet()` не створив би для неї власний `this`.',
+          why: 'Arrow functions не мають власного `this` binding і беруть `this` лексично.',
+          insight: 'Коли бачиш callback або method із дивним `this`, одразу перевіряй: arrow це чи regular function.'
+        }
+      }
+    ]
+  };
+
+  new JSLabEngine(config).init();
+</script>
+
+</body>
+</html>
