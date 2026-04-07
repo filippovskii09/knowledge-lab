@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Hook Slot Order</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .hook-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+    .column {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 260px;
+      transition: all 0.25s ease;
+    }
+    .column.active {
+      border-color: #3498db;
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      transform: translateY(-4px);
+    }
+    .column h4 { margin: 0 0 10px 0; color: #2c3e50; }
+    .slot {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f8fafb;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      border-left: 4px solid #95a5a6;
+    }
+    .ok { border-left-color: #27ae60; }
+    .bad { border-left-color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Rules of Hooks as Slot/Order Invariant</h2>
+    <p>React мапить Hooks за позицією виклику, а не за назвами змінних.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">Panel</span>({ <span class="var">show</span> }) {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">const</span> [<span class="var">count</span>] <span class="op">=</span> <span class="fn">useState</span>(0);</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>  <span class="kw">if</span> (<span class="op">!</span><span class="var">show</span>) <span class="kw">return</span> <span class="kw">null</span>;</div>
+        <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>  <span class="kw">const</span> [<span class="var">name</span>] <span class="op">=</span> <span class="fn">useState</span>(<span class="str">""</span>);</div>
+        <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Hook Slots</div>
+        <div class="hook-grid">
+          <div class="column" id="good-col">
+            <h4>Stable Order</h4>
+            <div class="slot ok"><strong>slot #1</strong><span>useState(count)</span></div>
+            <div class="slot ok"><strong>slot #2</strong><span>useState(name)</span></div>
+            <div class="slot ok"><strong>match</strong><span>Render #1 and Render #2 keep the same sequence</span></div>
+          </div>
+          <div class="column" id="bad-col">
+            <h4>Broken Order</h4>
+            <div class="slot bad"><strong>render #1</strong><span>slot #1 = count, slot #2 = name</span></div>
+            <div class="slot bad"><strong>render #2</strong><span>`show = false` -> only slot #1 runs</span></div>
+            <div class="slot bad"><strong>problem</strong><span>React can no longer align hook state slots correctly</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    function activate(id) {
+      ['good-col', 'bad-col'].forEach((colId) => document.getElementById(colId).classList.toggle('active', colId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l2',
+          action: () => activate('good-col'),
+          narration: {
+            title: '1. Hook calls occupy ordered slots',
+            what: 'Перший `useState` займає slot #1, другий `useState` займає slot #2.',
+            why: 'React мапить Hooks між renders саме за порядком виклику.',
+            insight: 'Назва змінної не рятує; вирішальною є позиція виклику в sequence.'
+          }
+        },
+        {
+          codeLine: 'l4',
+          action: () => activate('good-col'),
+          narration: {
+            title: '2. Stable top-level order keeps mapping valid',
+            what: 'Якщо обидва render викликають Hooks у тій самій послідовності, state slots зіставляються коректно.',
+            why: 'React очікує стабільний hook sequence для кожної component identity.',
+            insight: 'Саме це стоїть за фразою “call Hooks at the top level”.'
+          }
+        },
+        {
+          codeLine: 'l3',
+          action: () => activate('bad-col'),
+          narration: {
+            title: '3. Conditional early return breaks the sequence',
+            what: 'Коли `show === false`, другий hook call узагалі не відбувається.',
+            why: 'Отже sequence render #2 уже не збігається з render #1.',
+            insight: 'Проблема не в `if` як такому, а в тому, що він змінює hook order.'
+          }
+        },
+        {
+          codeLine: 'l4',
+          action: () => activate('bad-col'),
+          narration: {
+            title: '4. React loses slot alignment',
+            what: 'Якщо порядок hook calls плаває, React більше не знає, який state slot кому відповідає.',
+            why: 'Hook storage у React не шукає “useState by variable name”; він покладається на deterministic order.',
+            insight: 'Rules of Hooks це структурна вимога runtime, а не просто lint-style preference.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('good-col'),
+          narration: {
+            title: '5. Keep hooks static, move conditions inside logic',
+            what: 'Hooks треба викликати стабільно, а умовну поведінку вносити всередину hook logic або після викликів.',
+            why: 'Так зберігається slot invariant між renders.',
+            insight: 'Коли розумієш slot model, Rules of Hooks перестають бути списком заборон і стають очевидною механікою.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
