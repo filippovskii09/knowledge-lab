@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Root Lifecycle Board</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .root-board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      width: 100%;
+    }
+    .cell {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 220px;
+      transition: all 0.25s ease;
+    }
+    .cell.active {
+      border-color: #3498db;
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      transform: translateY(-4px);
+    }
+    .cell h4 { margin: 0 0 10px 0; color: #2c3e50; }
+    .status {
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      background: #f8fafb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Root Lifecycle</h2>
+    <p>Container -> createRoot -> render -> unmount.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">container</span> <span class="op">=</span> <span class="fn">document</span>.<span class="fn">getElementById</span>(<span class="str">"app"</span>);</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">root</span> <span class="op">=</span> <span class="fn">createRoot</span>(<span class="var">container</span>);</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span><span class="var">root</span>.<span class="fn">render</span>(<span class="op">&lt;</span><span class="fn">App</span> <span class="op">/&gt;</span>);</div>
+        <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span><span class="var">root</span>.<span class="fn">unmount</span>();</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Root Ownership</div>
+        <div class="root-board">
+          <div class="cell" id="c1"><h4>1. Container</h4><div class="status" id="s1">Plain DOM node, no React ownership yet.</div></div>
+          <div class="cell" id="c2"><h4>2. Root</h4><div class="status" id="s2">No root object yet.</div></div>
+          <div class="cell" id="c3"><h4>3. Subtree</h4><div class="status" id="s3">Nothing rendered.</div></div>
+          <div class="cell" id="c4"><h4>4. Teardown</h4><div class="status" id="s4">No cleanup needed yet.</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    function activate(id) {
+      ['c1', 'c2', 'c3', 'c4'].forEach((cellId) => document.getElementById(cellId).classList.toggle('active', cellId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l1',
+          action: () => activate('c1'),
+          narration: {
+            title: '1. A DOM container exists before React ownership',
+            what: 'Container це звичайний DOM вузол, який поки що не контролюється React.',
+            why: 'React root завжди прив\'язується до host container explicitly.',
+            insight: 'Container і root не одна й та сама сутність.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('c2');
+            document.getElementById('s2').textContent = 'Root object created. React can now manage this container subtree.';
+          },
+          narration: {
+            title: '2. createRoot establishes the control boundary',
+            what: 'React створює root object і бере ownership над subtree цього container.',
+            why: 'Сучасний React робить client root model явною.',
+            insight: 'Root це controller для life cycle всього дерева, а не просто стартова функція.'
+          }
+        },
+        {
+          codeLine: 'l3',
+          action: () => {
+            activate('c3');
+            document.getElementById('s3').textContent = 'App subtree mounted and updated through this root.';
+          },
+          narration: {
+            title: '3. root.render mounts or updates the subtree',
+            what: 'Через `root.render` React обчислює і commit-ить дерево в цей container.',
+            why: 'Після створення root усі подальші updates цього subtree проходять через нього.',
+            insight: 'Повторний `root.render` оновлює той самий root, а не створює новий React app.'
+          }
+        },
+        {
+          codeLine: 'l4',
+          action: () => {
+            activate('c4');
+            document.getElementById('s4').textContent = 'Unmount triggers subtree cleanup, effect teardown and detach.';
+          },
+          narration: {
+            title: '4. root.unmount cleanly ends the tree lifecycle',
+            what: 'React знімає subtree і запускає потрібні cleanup paths.',
+            why: 'Unmount важливий не лише для DOM, а й для effects, subscriptions і refs.',
+            insight: 'Видалити container із DOM без `root.unmount()` означає обірвати lifecycle неакуратно.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('c2'),
+          narration: {
+            title: '5. Root is the entry point of tree ownership',
+            what: 'Увесь React subtree lifecycle зводиться до створення, використання і завершення root.',
+            why: 'Це базова boundary модель сучасного React DOM.',
+            insight: 'Розуміння root дуже важливе для hydration, embedding і teardown-safe integration.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
