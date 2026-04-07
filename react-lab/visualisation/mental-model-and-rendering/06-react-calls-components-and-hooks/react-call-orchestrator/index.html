@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>React Call Orchestrator</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .orchestrator {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      width: 100%;
+    }
+    .track {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 250px;
+      transition: all 0.25s ease;
+    }
+    .track.active {
+      border-color: #3498db;
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      transform: translateY(-4px);
+    }
+    .track h4 { margin: 0 0 10px 0; color: #2c3e50; }
+    .node {
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: #f7fafc;
+      border-left: 4px solid #95a5a6;
+      font-size: 13px;
+    }
+    .ok { border-left-color: #27ae60; }
+    .bad { border-left-color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>React Calls Components and Hooks</h2>
+    <p>JSX створює tree boundary; direct function call його руйнує.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">Page</span>() {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">return</span> <span class="op">&lt;</span><span class="fn">Layout</span><span class="op">&gt;&lt;</span><span class="fn">Article</span> <span class="op">/&gt;&lt;/</span><span class="fn">Layout</span><span class="op">&gt;</span>;</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>}</div>
+        <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span></div>
+        <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span><span class="com">// bad</span></div>
+        <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span><span class="kw">function</span> <span class="fn">BrokenPage</span>() {</div>
+        <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span>  <span class="kw">return</span> <span class="op">&lt;</span><span class="fn">Layout</span><span class="op">&gt;</span>{<span class="fn">Article</span>()}<span class="op">&lt;/</span><span class="fn">Layout</span><span class="op">&gt;</span>;</div>
+        <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Call Ownership</div>
+        <div class="orchestrator">
+          <div class="track" id="good-track">
+            <h4>React-controlled path</h4>
+            <div class="node ok">JSX creates a distinct <code>Article</code> node in the tree</div>
+            <div class="node ok">React sees component type and identity</div>
+            <div class="node ok">Hooks/state bind to that position</div>
+            <div class="node ok">DevTools and reconciliation stay correct</div>
+          </div>
+          <div class="track" id="bad-track">
+            <h4>Direct call path</h4>
+            <div class="node bad">`Article()` runs immediately like a plain function</div>
+            <div class="node bad">No separate component boundary is expressed</div>
+            <div class="node bad">Hook order/identity can be violated</div>
+            <div class="node bad">React loses structural guarantees</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    function activate(id) {
+      ['good-track', 'bad-track'].forEach((trackId) => document.getElementById(trackId).classList.toggle('active', trackId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l2',
+          action: () => activate('good-track'),
+          narration: {
+            title: '1. JSX expresses a component boundary',
+            what: 'Запис `<Article />` дає React окремий вузол дерева з власним типом та identity.',
+            why: 'Це дозволяє React коректно матчити компонент у reconciliation.',
+            insight: 'JSX тут не просто синтаксис, а спосіб оголосити structural boundary.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('good-track'),
+          narration: {
+            title: '2. React decides when to call the component',
+            what: 'Сам React запускає `Article` під час render orchestration.',
+            why: 'Так він може прив\'язати Hooks і state до конкретної позиції в tree.',
+            insight: 'Component type в React це більше, ніж просто JS function value.'
+          }
+        },
+        {
+          codeLine: 'l7',
+          action: () => activate('bad-track'),
+          narration: {
+            title: '3. Direct call bypasses React tree semantics',
+            what: '`Article()` виконується одразу як звичайна функція всередині іншого render.',
+            why: 'Окрема component boundary більше не виражена для runtime.',
+            insight: 'Тут саме React втрачає інформацію про структуру, а не JavaScript “робить щось не так”.'
+          }
+        },
+        {
+          codeLine: 'l7',
+          action: () => activate('bad-track'),
+          narration: {
+            title: '4. Hook guarantees become fragile',
+            what: 'Якщо всередині `Article` є Hooks, direct call може зламати slot/order model.',
+            why: 'Hooks залежать від того, що React сам контролює sequence component renders.',
+            insight: 'Навіть якщо direct call випадково “працює”, він already outside the supported model.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('good-track'),
+          narration: {
+            title: '5. Let React orchestrate rendering',
+            what: 'Компоненти повинні використовуватися через JSX або інші React-level constructs.',
+            why: 'Тільки так React може гарантувати identity, debugging, optimization and rules enforcement.',
+            insight: 'У React “хто викликає” це частина механіки, а не дрібна stylistic detail.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
