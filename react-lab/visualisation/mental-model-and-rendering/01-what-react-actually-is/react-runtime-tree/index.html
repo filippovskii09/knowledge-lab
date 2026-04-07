@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>React Runtime Tree</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .runtime-board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      width: 100%;
+    }
+    .stage-card {
+      border: 2px solid #d7dde5;
+      border-radius: 12px;
+      background: #fff;
+      padding: 14px;
+      min-height: 210px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+      box-shadow: 0 8px 18px rgba(31, 45, 61, 0.06);
+    }
+    .stage-card.active {
+      border-color: #3498db;
+      transform: translateY(-4px);
+      box-shadow: 0 12px 26px rgba(52, 152, 219, 0.18);
+    }
+    .stage-card h4 {
+      margin: 0 0 8px 0;
+      color: #2c3e50;
+      font-size: 15px;
+    }
+    .pill {
+      display: inline-block;
+      margin: 0 6px 6px 0;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef4fb;
+      color: #2c3e50;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tree-box {
+      border: 1px dashed #b8c4d2;
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 10px;
+      background: #fbfdff;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .mutations {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .mutation {
+      border-left: 4px solid #95a5a6;
+      padding: 8px 10px;
+      background: #f8fafb;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    .mutation.done {
+      border-left-color: #27ae60;
+      background: #eefbf2;
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>What React Actually Is</h2>
+    <p>React як runtime: inputs, tree calculation, diff і host commit.</p>
+  </div>
+
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">App</span>() {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">const</span> <span class="var">isLoggedIn</span> <span class="op">=</span> <span class="kw">true</span>;</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>  <span class="kw">return</span> <span class="var">isLoggedIn</span> <span class="op">?</span> <span class="op">&lt;</span><span class="fn">Dashboard</span> <span class="op">/&gt;</span> <span class="op">:</span> <span class="op">&lt;</span><span class="fn">LoginScreen</span> <span class="op">/&gt;</span>;</div>
+        <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>}</div>
+        <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span></div>
+        <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span><span class="fn">root</span>.<span class="fn">render</span>(<span class="op">&lt;</span><span class="fn">App</span> <span class="op">/&gt;</span>);</div>
+      </div>
+
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Runtime Pipeline</div>
+        <div class="runtime-board">
+          <div class="stage-card" id="card-input">
+            <h4>1. Inputs</h4>
+            <span class="pill">state</span>
+            <span class="pill">props</span>
+            <span class="pill">context</span>
+            <div class="tree-box" id="box-input">Trigger: initial mount</div>
+          </div>
+          <div class="stage-card" id="card-render">
+            <h4>2. Render Tree</h4>
+            <div class="tree-box" id="box-render">React ще не рахував next tree.</div>
+          </div>
+          <div class="stage-card" id="card-diff">
+            <h4>3. Compare</h4>
+            <div class="tree-box" id="box-diff">Поки що немає diff work.</div>
+          </div>
+          <div class="stage-card" id="card-commit">
+            <h4>4. Commit</h4>
+            <div class="mutations">
+              <div class="mutation" id="m1">Create host nodes</div>
+              <div class="mutation" id="m2">Attach listeners/refs</div>
+              <div class="mutation" id="m3">DOM now matches current UI</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+
+    const cards = ['card-input', 'card-render', 'card-diff', 'card-commit'];
+    function activate(id) {
+      cards.forEach((cardId) => document.getElementById(cardId).classList.toggle('active', cardId === id));
+    }
+    function resetMutations() {
+      ['m1', 'm2', 'm3'].forEach((id) => document.getElementById(id).classList.remove('done'));
+    }
+
+    const config = {
+      steps: [
+        {
+          codeLine: 'l6',
+          action: () => {
+            activate('card-input');
+            resetMutations();
+            document.getElementById('box-input').textContent = 'Trigger: root.render(<App />)';
+            document.getElementById('box-render').textContent = 'React ще не обчислив, який subtree треба показати.';
+            document.getElementById('box-diff').textContent = 'Порівнювати поки що нічого.';
+          },
+          narration: {
+            title: '1. React receives a rendering request',
+            what: 'Root отримує команду побудувати поточний UI для container.',
+            why: 'React починає не з DOM-мутацій, а з формування робочого запиту на новий tree.',
+            insight: 'Будь-який React update стартує як запит на обчислення нового опису UI, а не як imperative DOM-команда.'
+          }
+        },
+        {
+          codeLine: 'l1',
+          action: () => {
+            activate('card-render');
+            resetMutations();
+            document.getElementById('box-render').textContent = 'App() -> <Dashboard />';
+            document.getElementById('box-diff').textContent = 'Next tree готовий для порівняння.';
+          },
+          narration: {
+            title: '2. Render phase computes the next tree',
+            what: 'React викликає компонент і отримує element description поточного UI.',
+            why: 'Саме render phase відповідає за питання "що має бути на екрані зараз", а не "як змінити DOM".',
+            insight: 'Компонентний код у React це перш за все tree computation logic.'
+          }
+        },
+        {
+          codeLine: 'l3',
+          action: () => {
+            activate('card-diff');
+            resetMutations();
+            document.getElementById('box-diff').textContent = 'Previous tree: empty; Next tree: Dashboard subtree';
+          },
+          narration: {
+            title: '3. React compares tree versions',
+            what: 'React бачить, що раніше subtree не було, а тепер потрібен Dashboard branch.',
+            why: 'Reconciliation потрібна, щоб зрозуміти мінімально необхідний набір host changes.',
+            insight: 'React мислить вузлами дерева, а не пошуком і редагуванням DOM елементів вручну.'
+          }
+        },
+        {
+          codeLine: 'l6',
+          action: () => {
+            activate('card-commit');
+            resetMutations();
+            document.getElementById('m1').classList.add('done');
+            document.getElementById('m2').classList.add('done');
+          },
+          narration: {
+            title: '4. Commit applies host mutations',
+            what: 'React DOM створює потрібні вузли й підв\'язує їх до container.',
+            why: 'Лише commit phase має право змінювати host environment.',
+            insight: 'Render і commit розділені саме для того, щоб React міг безпечно обчислювати tree окремо від побічних ефектів.'
+          }
+        },
+        {
+          codeLine: 'l6',
+          action: () => {
+            activate('card-commit');
+            document.getElementById('m1').classList.add('done');
+            document.getElementById('m2').classList.add('done');
+            document.getElementById('m3').classList.add('done');
+          },
+          narration: {
+            title: '5. The browser now reflects the current UI',
+            what: 'Після commit DOM уже відповідає поточному React tree.',
+            why: 'Саме в цей момент декларативний опис перетворюється на реальний host state.',
+            insight: 'React цінний не тим, що “пише HTML”, а тим, що керує переходом від tree model до synchronized UI state.'
+          }
+        }
+      ]
+    };
+
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
