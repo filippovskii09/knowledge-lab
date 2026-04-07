@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>React vs DOM Layers</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .layers {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      width: 100%;
+    }
+    .layer {
+      background: #fff;
+      border: 2px solid #d9e3ec;
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.25s ease;
+      min-height: 250px;
+    }
+    .layer.active {
+      border-color: #3498db;
+      transform: translateY(-4px);
+      box-shadow: 0 10px 22px rgba(52, 152, 219, 0.18);
+    }
+    .layer h4 { margin: 0 0 10px 0; color: #2c3e50; }
+    .item {
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      background: #f7fafc;
+      border-left: 4px solid #95a5a6;
+      font-size: 13px;
+    }
+    .item strong { display: block; margin-bottom: 4px; color: #34495e; }
+    .good { border-left-color: #8e44ad; }
+    .mid { border-left-color: #3498db; }
+    .host { border-left-color: #27ae60; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>React Elements vs Components vs DOM Nodes</h2>
+    <p>Три різні рівні: logic type, description object, host instance.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">Toolbar</span>() {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">return</span> <span class="op">&lt;</span><span class="fn">section</span><span class="op">&gt;&lt;</span><span class="fn">Button</span> <span class="op">/&gt;&lt;/</span><span class="fn">section</span><span class="op">&gt;</span>;</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Abstraction Layers</div>
+        <div class="layers">
+          <div class="layer" id="layer-component">
+            <h4>1. Component Types</h4>
+            <div class="item good"><strong>Toolbar</strong>Function with render logic</div>
+            <div class="item good"><strong>Button</strong>Another component type</div>
+          </div>
+          <div class="layer" id="layer-element">
+            <h4>2. Element Objects</h4>
+            <div class="item mid"><strong>{ type: Toolbar }</strong>Descriptor, not instance</div>
+            <div class="item mid"><strong>{ type: "section" }</strong>Host element description</div>
+            <div class="item mid"><strong>{ type: Button }</strong>Nested component description</div>
+          </div>
+          <div class="layer" id="layer-dom">
+            <h4>3. DOM Nodes</h4>
+            <div class="item host"><strong>&lt;section&gt;</strong>Real host node after commit</div>
+            <div class="item host"><strong>&lt;button&gt;?</strong>Only if Button returns one</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    const layers = ['layer-component', 'layer-element', 'layer-dom'];
+    function activate(id) {
+      layers.forEach((layerId) => document.getElementById(layerId).classList.toggle('active', layerId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l1',
+          action: () => activate('layer-component'),
+          narration: {
+            title: '1. Component is a callable React type',
+            what: 'Toolbar і Button на цьому рівні лише типи з render logic.',
+            why: 'Компонент визначає поведінку і структуру subtree, але сам не є DOM node.',
+            insight: 'Коли кажеш “цей компонент”, уточнюй: ти про type, render result чи host node?'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('layer-element'),
+          narration: {
+            title: '2. Render produces element descriptions',
+            what: 'Після render React працює з element objects, які описують наступний UI tree.',
+            why: 'Descriptor layer відокремлює логіку компонента від реального host environment.',
+            insight: 'Element object це опис вузла, а не жива інстанція.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('layer-dom'),
+          narration: {
+            title: '3. DOM appears only after commit',
+            what: 'React DOM створює реальні вузли лише тоді, коли commit phase уже визначила host work.',
+            why: 'Host instances повинні бути наслідком reconciliation, а не прямого JSX.',
+            insight: 'Один компонент може не мати власного DOM node взагалі, але все одно бути частиною tree identity.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('layer-dom');
+          },
+          narration: {
+            title: '4. The layers must not be mixed',
+            what: 'Component, element і DOM node живуть на різних фазах одного pipeline.',
+            why: 'Саме змішування цих рівнів породжує плутанину з refs, state і reconciliation.',
+            insight: 'Найкращий дебаг-підхід: завжди питай себе, на якому рівні зараз лежить проблема.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
