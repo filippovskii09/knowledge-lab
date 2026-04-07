@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Render Snapshot Board</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .snapshots {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+      width: 100%;
+    }
+    .shot {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 240px;
+      transition: all 0.25s ease;
+    }
+    .shot.active {
+      border-color: #3498db;
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+      transform: translateY(-4px);
+    }
+    .shot h4 { margin: 0 0 10px 0; color: #2c3e50; }
+    .value {
+      font-size: 34px;
+      font-weight: 800;
+      color: #2c3e50;
+      margin: 10px 0;
+    }
+    .meta {
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      background: #f8fafb;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Snapshot Model of a Render</h2>
+    <p>Кожен render має власний snapshot; callbacks пам'ятають саме його.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">Counter</span>() {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">const</span> [<span class="var">count</span>, <span class="var">setCount</span>] <span class="op">=</span> <span class="fn">useState</span>(0);</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>  <span class="kw">function</span> <span class="fn">handleClick</span>() {</div>
+        <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>    <span class="fn">setTimeout</span>(() <span class="op">=&gt;</span> <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">count</span>), 1000);</div>
+        <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span>  }</div>
+        <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Render Snapshots</div>
+        <div class="snapshots">
+          <div class="shot" id="r1">
+            <h4>Render #1</h4>
+            <div class="value">count = 0</div>
+            <div class="meta">handleClick created here<br>timeout closure captures 0</div>
+          </div>
+          <div class="shot" id="r2">
+            <h4>Render #2</h4>
+            <div class="value">count = 1</div>
+            <div class="meta">new snapshot after setCount<br>new handlers may capture 1</div>
+          </div>
+          <div class="shot" id="cb">
+            <h4>Async Callback</h4>
+            <div class="value" id="cb-value">?</div>
+            <div class="meta" id="cb-meta">Waiting for closure execution...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    function activate(id) {
+      ['r1', 'r2', 'cb'].forEach((shotId) => document.getElementById(shotId).classList.toggle('active', shotId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('r1');
+            document.getElementById('cb-value').textContent = '?';
+            document.getElementById('cb-meta').textContent = 'Waiting for closure execution...';
+          },
+          narration: {
+            title: '1. Initial render creates snapshot #1',
+            what: 'Перший render бачить `count = 0` і створює handlers для цього знімка.',
+            why: 'Render має фіксований набір inputs і не мутується після завершення.',
+            insight: 'Кожен handler народжується всередині конкретного render snapshot.'
+          }
+        },
+        {
+          codeLine: 'l3',
+          action: () => activate('r1'),
+          narration: {
+            title: '2. handleClick closes over render #1 values',
+            what: 'Функція `handleClick` і timeout callback запам\'ятовують саме той `count`, який був у цьому render.',
+            why: 'Closure в JavaScript замикає lexical values поточного виклику.',
+            insight: 'React snapshot model і JS closures тут працюють разом.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('r2'),
+          narration: {
+            title: '3. A later update creates snapshot #2',
+            what: 'Після `setCount(1)` React робить новий render, де `count = 1`.',
+            why: 'State не переписує старий render; він породжує новий.',
+            insight: 'Правильна mental model: не “state змінився в старому render”, а “з\'явився новий render із новим state”.'
+          }
+        },
+        {
+          codeLine: 'l4',
+          action: () => {
+            activate('cb');
+            document.getElementById('cb-value').textContent = '0';
+            document.getElementById('cb-meta').textContent = 'Timeout callback still reads the value captured in render #1.';
+          },
+          narration: {
+            title: '4. The async callback still sees the old snapshot',
+            what: 'Навіть якщо UI вже показує `1`, старий timeout callback може логувати `0`.',
+            why: 'Він був створений у render #1 і не магічно перемапився на render #2.',
+            insight: 'Stale closure баги не дивина React, а прямий наслідок snapshot semantics.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => activate('r2'),
+          narration: {
+            title: '5. Snapshots are a feature, not a flaw',
+            what: 'React робить render behavior передбачуваним, бо кожен render має свої стабільні inputs.',
+            why: 'Без цього purity, batching і predictable UI reasoning були б значно слабшими.',
+            insight: 'Коли треба mutable “latest value”, це вже інша модель: refs або спеціальні patterns, а не заперечення snapshot idea.'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
