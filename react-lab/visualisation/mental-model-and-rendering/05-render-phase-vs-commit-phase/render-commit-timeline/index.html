@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <title>Render vs Commit Timeline</title>
+  <link rel="stylesheet" href="../../../../../js-lab/visualisation/core/theme.css">
+  <style>
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      width: 100%;
+    }
+    .phase {
+      background: #fff;
+      border: 2px solid #d8e2eb;
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 220px;
+      transition: all 0.25s ease;
+    }
+    .phase.active {
+      border-color: #3498db;
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(52, 152, 219, 0.18);
+    }
+    .phase h4 { margin: 0 0 8px 0; color: #2c3e50; }
+    .badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef4fb;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .mini {
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .done { color: #1e8449; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="js-lab-header">
+    <h2>Render Phase vs Commit Phase</h2>
+    <p>Compute first, mutate later. DOM не оновлюється під час render.</p>
+  </div>
+  <div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+  </div>
+  <div class="js-lab-app">
+    <div class="js-lab-top-row">
+      <div class="js-lab-code">
+        <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">Counter</span>({ <span class="var">count</span> }) {</div>
+        <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">return</span> <span class="op">&lt;</span><span class="fn">span</span><span class="op">&gt;</span>{<span class="var">count</span>}<span class="op">&lt;/</span><span class="fn">span</span><span class="op">&gt;</span>;</div>
+        <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>}</div>
+      </div>
+      <div class="js-lab-stack">
+        <div class="js-lab-stack-title">Timeline</div>
+        <div class="timeline">
+          <div class="phase" id="ph-update"><h4>1. Update</h4><div class="badge">trigger</div><div class="mini">State/props changed</div></div>
+          <div class="phase" id="ph-render"><h4>2. Render</h4><div class="badge">compute</div><div class="mini" id="render-mini">No DOM mutation yet</div></div>
+          <div class="phase" id="ph-commit"><h4>3. Commit</h4><div class="badge">apply</div><div class="mini" id="commit-mini">Host mutations pending</div></div>
+          <div class="phase" id="ph-paint"><h4>4. Paint</h4><div class="badge">browser</div><div class="mini" id="paint-mini">User still sees old UI</div></div>
+          <div class="phase" id="ph-effect"><h4>5. Passive Effects</h4><div class="badge">after</div><div class="mini" id="effect-mini">useEffect later</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="js-lab-analysis">
+      <h3 id="analysis-title">Title</h3>
+      <div id="analysis-body" class="log-wrapper fade-in">
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Що:</span><span id="log-what"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Чому:</span><span id="log-why"></span></div>
+        <div class="js-lab-log-item"><span class="js-lab-log-label">Інсайт:</span><span id="log-insight" style="color: var(--log-accent); font-weight: 700;"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { JSLabEngine } from '../../../../../js-lab/visualisation/core/engine.js';
+    const ids = ['ph-update', 'ph-render', 'ph-commit', 'ph-paint', 'ph-effect'];
+    function activate(id) {
+      ids.forEach((phaseId) => document.getElementById(phaseId).classList.toggle('active', phaseId === id));
+    }
+    const config = {
+      steps: [
+        {
+          codeLine: 'l1',
+          action: () => activate('ph-update'),
+          narration: {
+            title: '1. Update is scheduled',
+            what: 'React отримує сигнал, що tree треба перерахувати.',
+            why: 'Будь-яка зміна починається з update request, а не з прямої DOM mutation.',
+            insight: 'Update trigger ще не означає, що DOM already changed.'
+          }
+        },
+        {
+          codeLine: 'l1',
+          action: () => {
+            activate('ph-render');
+            document.getElementById('render-mini').textContent = 'React calls Counter and computes <span>{count}</span>.';
+          },
+          narration: {
+            title: '2. Render phase computes next UI',
+            what: 'React викликає компонент і будує next description tree.',
+            why: 'Тут вирішується, який UI має бути, але ще не торкається host environment.',
+            insight: 'Render це computation phase, не mutation phase.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('ph-commit');
+            document.getElementById('commit-mini').innerHTML = '<span class="done">Apply DOM changes, refs, layout work.</span>';
+          },
+          narration: {
+            title: '3. Commit performs host work',
+            what: 'React DOM застосовує реальні зміни до container subtree.',
+            why: 'Лише commit має право робити observable side effects у host layer.',
+            insight: 'Саме тут DOM починає наздоганяти React tree.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('ph-paint');
+            document.getElementById('paint-mini').innerHTML = '<span class="done">Browser can now show updated UI.</span>';
+          },
+          narration: {
+            title: '4. Browser paints the new result',
+            what: 'Після commit браузер отримує шанс намалювати новий стан.',
+            why: 'Render і commit самі по собі ще не тотожні browser paint.',
+            insight: 'Не плутай “component rendered” із “user already saw the update”.'
+          }
+        },
+        {
+          codeLine: 'l2',
+          action: () => {
+            activate('ph-effect');
+            document.getElementById('effect-mini').innerHTML = '<span class="done">Passive effects run after the committed UI exists.</span>';
+          },
+          narration: {
+            title: '5. Passive effects run later',
+            what: 'Код із `useEffect` синхронізує зовнішній світ уже після зафіксованого UI state.',
+            why: 'Effects не мають забруднювати render phase.',
+            insight: 'Effect logic це post-commit synchronization layer.'
+          }
+        },
+        {
+          codeLine: 'l1',
+          action: () => activate('ph-render'),
+          narration: {
+            title: '6. The key split: compute first, apply later',
+            what: 'React спеціально розриває pipeline на render і commit.',
+            why: 'Це дає replayability, better scheduling і чітку межу для побічних ефектів.',
+            insight: 'Якщо ти не знаєш, де щось має жити, перше питання: це render computation чи external synchronization?'
+          }
+        }
+      ]
+    };
+    new JSLabEngine(config).init();
+  </script>
+</body>
+</html>
