@@ -4,7 +4,7 @@
 
 **Execution Model** — це набір правил, за якими JavaScript рушій:
 
-1. готує declarations перед виконанням;
+1. перед виконанням знаходить оголошення і створює bindings для їхніх імен;
 2. створює місця, де живуть імена та значення;
 3. шукає змінні по scope chain;
 4. керує порядком викликів функцій;
@@ -59,7 +59,7 @@
 
 ```mermaid
 flowchart TD
-  A["Код завантажено"] --> B["Declaration Instantiation: підготовка bindings"]
+  A["Код завантажено"] --> B["Declaration Instantiation: підготовка імен"]
   B --> C["Execution Context: де зараз виконується код"]
   C --> D["Lexical Environment: де живуть імена"]
   D --> E["Identifier Resolution: пошук імен по OuterEnv"]
@@ -110,7 +110,14 @@ person.greet();
 
 ### 1. [Declaration Instantiation](../01-declaration-instantiation/README.md)
 
-**Людська назва:** підготовка змінних і функцій перед виконанням.
+**Людська назва:** підготовка імен змінних, функцій і класів перед виконанням.
+
+Це один із перших підготовчих етапів у Execution Model для конкретного script/function/module scope. Рушій ще не виконує наші рядки як бізнес-логіку, але вже проходить declarations і створює для їхніх імен **bindings** у відповідному scope.
+
+Тобто в `let a = 10`:
+
+- `let a` — частина declaration, яка каже: “у цьому scope має існувати ім'я `a`”;
+- `= 10` — ініціалізація значення, яка станеться вже під час execution на цьому рядку.
 
 **Що пояснює:**
 
@@ -119,7 +126,7 @@ person.greet();
 - чому `let` / `const` існують, але до ініціалізації дають TDZ error;
 - чому “hoisting” краще розуміти як підготовку bindings, а не фізичне переміщення коду.
 
-**У прикладі:** рушій ще до виконання рядків знає про `user`, `createGreeter` і `person`, але їхній стан залежить від типу declaration.
+**У прикладі:** рушій ще до виконання рядків бачить declarations для `user`, `createGreeter` і `person`, створює для цих імен bindings, але їхній стартовий стан залежить від типу declaration.
 
 ---
 
@@ -188,7 +195,7 @@ person.greet();
 ## IV. Як це відбувається в часі
 
 1. **Код завантажено.** Рушій ще не виконав бізнес-логіку.
-2. **Declaration Instantiation.** Створюються bindings для declarations.
+2. **Declaration Instantiation.** Рушій знаходить оголошення і створює bindings для їхніх імен.
 3. **Global Execution Context.** Починається виконання глобального коду.
 4. **Global Lexical Environment.** Глобальні імена мають місце для зберігання.
 5. **Function Call.** `createGreeter("hi")` створює новий Function Execution Context.
