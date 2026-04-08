@@ -230,80 +230,280 @@ let run = function() {
 
 `ReferenceError: Cannot access 'run' before initialization`
 
-### Області видимості
-В JS контейнером для змінних є **Scope**(Область видимості).
-Але `let` та `var` по-різному бачать ці контейнери.
+## Області видимості: `var` vs `let` / `const`
 
-#### Function Scope
+**Теза:** Declaration Instantiation не можна зрозуміти без **Scope**. Саме scope відповідає на питання, **куди саме** буде записаний binding: у середовище функції чи в окремий блок `{ ... }`.
 
-Для var існує тільки один тип кордону — це Функція. 
-Будь-які інші дужки (if, for, while, {}) для нього "прозорі". Він їх ігнорує.
+У JavaScript існує важлива різниця:
 
-Приклад
-```
-function sayHello() {
-	if (true) {
-		var greating = "Hello!"; 
-	}
-	console.log(greating);
-}
+- `var` бачить **function scope**;
+- `let` і `const` бачать **block scope**.
 
-sayHello();
+Це означає, що один і той самий код у `if`, `for` або простому блоці `{ ... }` може створювати bindings у різних контейнерах залежно від типу declaration.
 
-```
+---
 
-#### Як відпрацює саме цей код
+### I. Function Scope для `var`
 
-Етап 1. Creation Phase
+**Теза:** Для `var` справжнім кордоном є лише **функція**. Блоки `if`, `for`, `while` і просто `{ ... }` для нього прозорі.
 
-1. Рушій сканує код функції `sayHello`.
-2. Він бачить `var` всередині блоку `if`.
-3. Рушій ігнорує межі блоку `if`. Він реєструє змінну у Environment Record самої функції.
-4. Змінна "належить" усій функції, а не блоку `if`.
-
-Етап 2. Execution Phase
-
-1. Виконується код всередині `if`: `greating = "Hello!"`
-2. Виконується `console.log(greating)` за межами `if`. Оскільки `greating` живе у функції, консоль її бачить.
-
-
-#### Block Scope
-
-Для `let` та `const` будь-яка пара фігурних дужок { ... } є окремим, ізольованим контейнером.
-
-Приклад
+#### Приклад
 ```javascript
 function sayHello() {
-	if (true) {
-		let greating = "Hello!"; 
-	}
-	console.log(greating);
+  if (true) {
+    var greeting = "Hello!";
+  }
+
+  console.log(greeting);
 }
 
-sayHello();
+sayHello(); // "Hello!"
 ```
 
-#### Як відпрацює саме цей код
+#### Просте пояснення
+Хоча змінна `greeting` написана всередині `if`, для `var` це не має значення. Рушій реєструє її не в блоці `if`, а в області видимості всієї функції `sayHello`.
 
-Етап 1. Creation Phase (Вхід у sayHello)
+Тому після виходу з `if` змінна не зникає. Вона все ще належить функції і доступна нижче.
 
-1. Рушій сканує код функції `sayHello`.
-2. Він бачить `if`. Але він не заглядає всередину для пошуку `let`.
-3. У Scope функції `sayHello` змінна `greating` не реєструється.
-4. Змінна "належить" блоку `if`.
+#### Технічне пояснення
+Під час **Creation Phase** для `sayHello` рушій аналізує все тіло функції та збирає всі `var` declarations у **Function Environment Record**.
 
-Етап 2. Creation Phase (Вхід в if блок)
+Що відбувається:
 
-1. Коли виконання доходить до `if`, створюється новий Environment Record (Block Scope).
-2. Тут реєструється змінна `greating`.
+1. Рушій заходить у тіло функції `sayHello`.
+2. Він знаходить `var greeting`.
+3. Він **не створює окремий block binding** для `if`.
+4. Він реєструє `greeting` у середовищі самої функції.
+5. Оскільки це `var`, binding одразу ініціалізується як `undefined`.
 
-Етап 2. Execution Phase
+Після Creation Phase стан приблизно такий:
 
-1. Код виходить з блоку `if`. Scope знищується (разом з `greating`).
-2. `console.log(greating)` шукає змінну у функції, але її там немає.
+```javascript
+FunctionEnvironmentRecord(sayHello) = {
+  greeting: undefined
+}
+```
 
-TODO: 
-1. const 
-2. class hoisting 
-3. function declaration in blokcs
-4. 
+Під час **Execution Phase**:
+
+1. Умова `if (true)` проходиться.
+2. Виконується assignment `greeting = "Hello!"`.
+3. `console.log(greeting)` читає вже той самий function-scoped binding.
+
+#### Візуалізація
+```mermaid
+graph TD
+  A["Вхід у function sayHello"] --> B["Creation Phase"]
+  B --> C["Знайдено var greeting"]
+  C --> D["Binding записано у Function Environment Record"]
+  D --> E["Initial state: greeting = undefined"]
+  E --> F["Execution Phase"]
+  F --> G["if block assigns greeting = 'Hello!'"]
+  G --> H["console.log читає function-scoped binding"]
+```
+
+#### Edge Cases / Підводні камені
+> **Найчастіша помилка:** новачок бачить `var` всередині `if` і думає, що змінна “належить” цьому `if`. Для `var` це неправда. Блок не створює новий контейнер для такого binding.
+
+> **Цикли `for`:** `var i` у циклі теж належить усій функції, а не окремій ітерації. Саме це породжує класичні баги зі старим значенням `i` у колбеках.
+
+---
+
+### II. Block Scope для `let`
+
+**Теза:** Для `let` кожен блок `{ ... }` створює власний контейнер. Binding живе тільки всередині цього блоку й недоступний зовні.
+
+#### Приклад
+```javascript
+function sayHello() {
+  if (true) {
+    let greeting = "Hello!";
+  }
+
+  console.log(greeting);
+}
+
+sayHello(); // ReferenceError
+```
+
+#### Просте пояснення
+Тут `greeting` справді належить блоку `if`. Після виходу з блоку цей binding більше не видно. Функція `sayHello` зовні цього імені не має.
+
+#### Технічне пояснення
+На відміну від `var`, `let` не потрапляє в основний function-scoped контейнер. Для блоку `if` рушій створює **окремий Block Environment Record**.
+
+Що відбувається:
+
+1. Під час входу в `sayHello` у Function Environment Record binding `greeting` **не створюється**.
+2. Коли виконання доходить до блоку `if`, рушій створює нове block lexical environment.
+3. Усередині цього block environment створюється binding `greeting`.
+4. До рядка `let greeting = "Hello!"` binding перебуває в стані `uninitialized` (TDZ).
+5. Після виконання рядка binding отримує значення `"Hello!"`.
+6. Після виходу з блоку цей block environment більше не бере участі в identifier resolution для коду нижче.
+
+#### Візуалізація
+```mermaid
+graph TD
+  A["Вхід у function sayHello"] --> B["Function Environment Record"]
+  B --> C["Binding greeting тут НЕ створюється"]
+  C --> D["Вхід у if block"]
+  D --> E["Створюється Block Environment Record"]
+  E --> F["greeting = <uninitialized>"]
+  F --> G["Після рядка let greeting = 'Hello!'"]
+  G --> H["greeting = 'Hello!'"]
+  H --> I["Вихід з блоку"]
+  I --> J["Нижній console.log не знаходить greeting"]
+```
+
+#### Edge Cases / Підводні камені
+> **TDZ всередині блоку:** навіть усередині правильного блоку `let` не можна читати до рядка ініціалізації.
+
+> **Не плутай “binding знищується” і “ім'я невидиме”:** для практичного мислення достатньо вважати, що після виходу з блоку цей binding більше не бере участі в пошуку імені.
+
+---
+
+### III. `const`: те саме block scope, але без переприсвоєння
+
+**Теза:** `const` поводиться так само, як `let`, з погляду Declaration Instantiation: він теж є block-scoped і теж проходить через TDZ. Головна різниця з'являється вже після ініціалізації — `const` не можна переприсвоїти.
+
+#### Приклад
+```javascript
+{
+  console.log(id);
+  const id = 42;
+}
+```
+
+#### Просте пояснення
+`const` не є “безпечнішим `var`”. Це блокова змінна, яка до рядка оголошення також недоступна. Тому ми знову отримуємо TDZ-помилку.
+
+#### Технічне пояснення
+Під час входу в block scope:
+
+1. Рушій створює binding `id`.
+2. Стан binding — `uninitialized`.
+3. Спроба читання `id` до виконання рядка `const id = 42` кидає `ReferenceError`.
+4. Після ініціалізації binding уже має конкретне значення.
+5. Подальша спроба `id = 100` дасть `TypeError`, бо const binding не допускає переприсвоєння.
+
+#### Візуалізація
+```mermaid
+graph LR
+  A["Block starts"] --> B["const id binding created"]
+  B --> C["State: <uninitialized>"]
+  C --> D["Read before init?"]
+  D -->|Yes| E["ReferenceError (TDZ)"]
+  D -->|No| F["const id = 42"]
+  F --> G["State: 42"]
+```
+
+#### Edge Cases / Підводні камені
+> **`const` не робить значення immutable.** Він лише забороняє переприсвоїти сам binding. Якщо всередині лежить object, його внутрішній стан все ще можна мутувати.
+
+---
+
+### IV. `class` теж проходить через TDZ
+
+**Теза:** Оголошення класу (`class`) поводиться ближче до `let` / `const`, ніж до function declaration. Binding класу створюється заздалегідь, але до ініціалізації недоступний.
+
+#### Приклад
+```javascript
+const user = new User();
+
+class User {
+  constructor() {
+    this.name = "Artur";
+  }
+}
+```
+
+#### Просте пояснення
+Хоча клас схожий на “велике оголошення функції”, використовувати його до рядка `class User {}` не можна. Рушій знає, що таке ім'я існує, але ще не дозволяє читати його.
+
+#### Технічне пояснення
+Під час Declaration Instantiation:
+
+1. Рушій створює binding `User`.
+2. Стан binding — `uninitialized`.
+3. Спроба `new User()` до виконання class declaration читає цей binding занадто рано.
+4. Результат — `ReferenceError`, а не `TypeError`.
+
+Це важлива різниця:
+
+- **Function Declaration** -> одразу function object.
+- **Class Declaration** -> binding існує, але перебуває в TDZ до моменту ініціалізації.
+
+#### Візуалізація
+```mermaid
+graph TD
+  A["Creation Phase"] --> B["class User binding created"]
+  B --> C["State: <uninitialized>"]
+  C --> D["Execution reaches new User() before class line"]
+  D --> E["ReferenceError"]
+  C --> F["Execution reaches class User line"]
+  F --> G["Binding initialized with class constructor"]
+```
+
+#### Edge Cases / Підводні камені
+> **Часте когнітивне викривлення:** “клас же компілюється у функцію, отже має поводитися як function declaration”. На рівні runtime binding semantics це не так.
+
+---
+
+### V. Function Declaration у блоках
+
+**Теза:** Оголошення функції всередині блоку — одна з найбільш заплутаних частин старого JavaScript. У **Strict Mode** воно поводиться приблизно як block-scoped binding; у **Non-Strict Mode** браузери історично додавали сумісні, але менш чисті правила.
+
+#### Приклад
+```javascript
+"use strict";
+
+if (true) {
+  function inside() {
+    return "ok";
+  }
+}
+
+inside(); // ReferenceError
+```
+
+#### Просте пояснення
+У strict mode функція `inside` належить блоку `if`, а не зовнішньому scope. Тому за межами блоку її не видно.
+
+#### Технічне пояснення
+У сучасному strict-mode мисленні declaration функції в блоці поводиться як окремий block-level binding. Тобто:
+
+1. Для блоку створюється власний Environment Record.
+2. Ім'я `inside` реєструється саме там.
+3. Поза блоком identifier resolution цього binding не бачить.
+
+У non-strict mode історично існували web-compat винятки, через які браузери могли частково “підіймати” такі функції назовні. Саме тому ця тема довго вважалася джерелом плутанини.
+
+#### Візуалізація
+```mermaid
+graph TD
+  A["Strict mode block"] --> B["Create Block Environment Record"]
+  B --> C["Register function inside in block"]
+  C --> D["Call outside block"]
+  D --> E["Identifier not found outside -> ReferenceError"]
+```
+
+#### Edge Cases / Підводні камені
+> **Практична рекомендація:** не покладайся на function declarations усередині блоків для складної логіки. Якщо потрібна передбачуваність, використовуй `const fn = function () {}` або `const fn = () => {}` у чітко видимому scope.
+
+---
+
+### VI. Підсумок: що саме треба винести з цієї статті
+
+| Конструкція | Де створюється binding | Стартовий стан | Чи можна читати до рядка оголошення? |
+| :--- | :--- | :--- | :--- |
+| `var` | Function scope / global scope | `undefined` | Так |
+| `let` | Block scope | `uninitialized` | Ні, TDZ |
+| `const` | Block scope | `uninitialized` | Ні, TDZ |
+| `function declaration` | Поточний scope | function object | Так |
+| `class declaration` | Block або поточний lexical scope | `uninitialized` | Ні, TDZ |
+
+**Головна ідея:** Declaration Instantiation — це не “магічне переміщення коду вверх”. Це підготовчий етап, де рушій створює bindings і задає їм початковий стан. Саме тип declaration визначає:
+
+1. **де** житиме binding;
+2. **у якому стані** він стартує;
+3. **чи можна** читати його до execution line.
