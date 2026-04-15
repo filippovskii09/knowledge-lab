@@ -341,6 +341,59 @@ sayHello(); // ReferenceError
 5. Після виконання рядка binding отримує значення `"Hello!"`.
 6. Після виходу з блоку цей block environment більше не бере участі в identifier resolution для коду нижче.
 
+#### Міні-словник до цього механізму
+
+Тут легко заплутатися в назвах, бо ми говоримо про різні рівні однієї структури.
+
+| Термін | Людською мовою | Що саме означає в цьому прикладі |
+| :--- | :--- | :--- |
+| **Lexical Environment** | контейнер області видимості | Об'єкт-обгортка, який містить сховище bindings і посилання на зовнішній scope. |
+| **Environment Record** | сховище імен усередині контейнера | Таблиця, де лежать конкретні bindings: `greeting`, параметри, локальні змінні. |
+| **Function Environment Record** | record для виклику функції | Environment Record, який належить function execution context `sayHello`. |
+| **Block Lexical Environment** | lexical environment для блоку `{ ... }` | Тимчасовий контейнер, який створюється для `if` block і має власний record для `let` / `const`. |
+| **Identifier Resolution** | пошук імені | Алгоритм, який шукає `greeting`: спочатку в поточному environment, потім через зовнішні environments. |
+
+Ключова різниця в назвах:
+
+- **Lexical Environment** — це весь контейнер.
+- **Environment Record** — це внутрішнє сховище bindings усередині контейнера.
+
+Тому фрази не суперечать одна одній:
+
+```text
+Function Lexical Environment
+  -> має Function Environment Record
+
+Block Lexical Environment
+  -> має Block/Declarative Environment Record
+```
+
+У строгій термінології специфікації для блоку використовується **Declarative Environment Record**. У навчальному поясненні його часто називають **Block Environment Record**, щоб підкреслити: цей record створений саме для блоку `{ ... }`.
+
+#### Чому після блоку `greeting` не знаходиться
+
+Коли код виходить із `if`, поточний ланцюжок пошуку імен знову виглядає так:
+
+```text
+Function Lexical Environment(sayHello)
+  -> Outer Environment
+```
+
+А block lexical environment, де лежав `greeting`, більше не є активною частиною цього ланцюжка.
+
+Тому нижній рядок:
+
+```javascript
+console.log(greeting);
+```
+
+запускає **Identifier Resolution**:
+
+1. Шукає `greeting` у Function Environment Record `sayHello`.
+2. Не знаходить.
+3. Іде у зовнішній environment.
+4. Якщо ніде не знаходить binding — кидає `ReferenceError`.
+
 #### Візуалізація
 ```mermaid
 graph TD
@@ -418,7 +471,7 @@ class User {
 ```
 
 #### Просте пояснення
-Хоча клас схожий на “велике оголошення функції”, використовувати його до рядка `class User {}` не можна. Рушій знає, що таке ім'я існує, але ще не дозволяє читати його.
+На цьому етапі нам не потрібно розбирати, як класи працюють під капотом. Для Declaration Instantiation важливо лише одне: ім'я класу `User` готується заздалегідь, але читати його до рядка `class User {}` не можна.
 
 #### Технічне пояснення
 Під час Declaration Instantiation:
@@ -433,6 +486,46 @@ class User {
 - **Function Declaration** -> одразу function object.
 - **Class Declaration** -> binding існує, але перебуває в TDZ до моменту ініціалізації.
 
+#### Як це приблизно виглядає в пам'яті
+
+Після **Creation Phase** рушій уже створив binding для імені `User`, але ще не поклав туди class constructor:
+
+```javascript
+LexicalEnvironment = {
+  EnvironmentRecord: {
+    user: <uninitialized>,
+    User: <uninitialized>
+  },
+  OuterEnv: null
+};
+```
+
+Перший рядок execution:
+
+```javascript
+const user = new User();
+```
+
+змушує рушій прочитати binding `User`. Але стан binding ще `uninitialized`, тому виконання зупиняється:
+
+```text
+Read User -> <uninitialized> -> ReferenceError
+```
+
+Якби рядок `new User()` стояв після class declaration, тоді під час execution class declaration ініціалізувала б binding:
+
+```javascript
+LexicalEnvironment = {
+  EnvironmentRecord: {
+    user: <uninitialized>,
+    User: <class constructor User>
+  },
+  OuterEnv: null
+};
+```
+
+Після цього `new User()` уже читав би готовий class constructor.
+
 #### Візуалізація
 ```mermaid
 graph TD
@@ -445,7 +538,7 @@ graph TD
 ```
 
 #### Edge Cases / Підводні камені
-> **Часте когнітивне викривлення:** “клас же компілюється у функцію, отже має поводитися як function declaration”. На рівні runtime binding semantics це не так.
+> **Не змішуй рівні:** у цій статті ми розбираємо лише binding semantics класу під час Declaration Instantiation. Те, як `class` пов'язаний із constructor/prototype model, розбирається окремо в [Syntactic Sugar](../../functions-and-oop/03-class-syntactic-sugar/README.md) та [Function Internal Slots](../../functions-and-oop/04-function-internal-slots/README.md).
 
 ---
 
