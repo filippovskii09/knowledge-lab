@@ -230,6 +230,321 @@ let run = function() {
 
 `ReferenceError: Cannot access 'run' before initialization`
 
+## Formal Parameters: параметри функції теж декларуються
+
+**Теза:** Параметри функції - це не просто "локальні змінні, які магічно з'явились". Під час виклику функції рушій також проходить **FunctionDeclarationInstantiation** і створює bindings для formal parameters до виконання тіла функції.
+
+### Що таке Formal Parameter?
+
+**Formal parameter** - це ім'я, записане в дужках під час оголошення функції.
+
+```javascript
+function greet(name, role) {
+  console.log(name, role);
+}
+```
+
+Тут:
+
+- `name` - formal parameter;
+- `role` - formal parameter;
+- `"Artur"` у виклику `greet("Artur")` - це вже **argument**, тобто фактичне значення, яке передали під час виклику.
+
+### Простий приклад
+
+```javascript
+function greet(name, role = "student") {
+  console.log(name);
+  console.log(role);
+}
+
+greet("Artur");
+```
+
+### Що відбувається під час виклику?
+
+До виконання першого рядка всередині `greet` рушій уже створює bindings для параметрів:
+
+```text
+Function Environment Record {
+  name: "Artur",
+  role: "student"
+}
+```
+
+Тобто тіло функції ще не почало виконуватись, але імена `name` і `role` вже існують у function environment.
+
+### Технічне пояснення
+
+Коли викликається функція, JavaScript створює **Function Execution Context**. Перед виконанням тіла функції запускається внутрішній алгоритм **FunctionDeclarationInstantiation**.
+
+У спрощеному вигляді він робить таке:
+
+1. Бере список formal parameters.
+2. Створює bindings для цих імен у Function Environment Record.
+3. Бере передані arguments.
+4. Записує значення arguments у відповідні parameter bindings.
+5. Якщо argument не передали, значенням буде `undefined`.
+6. Якщо є default parameter, він обчислюється на цьому ж етапі.
+
+```javascript
+function demo(a, b) {
+  console.log(a, b);
+}
+
+demo(10);
+```
+
+Стан перед виконанням тіла `demo`:
+
+```text
+Function Environment Record {
+  a: 10,
+  b: undefined
+}
+```
+
+### Default parameters і порядок зліва направо
+
+Параметри ініціалізуються **зліва направо**.
+
+```javascript
+function demo(a, b = a) {
+  console.log(a, b);
+}
+
+demo(10); // 10 10
+```
+
+Тут `b` може використати `a`, бо `a` уже ініціалізований.
+
+Але навпаки не можна:
+
+```javascript
+function demo(a = b, b = 2) {
+  console.log(a, b);
+}
+
+demo(); // ReferenceError
+```
+
+Коли рушій обчислює `a = b`, binding `b` уже відомий як параметр, але ще не ініціалізований. Це схоже на TDZ для `let` / `const`.
+
+### Важлива деталь про Environment Record
+
+У простому випадку параметри, `var` і function declarations живуть в одному Function Environment Record.
+
+```javascript
+function demo(a) {
+  var b = 2;
+
+  function inner() {}
+}
+```
+
+Приблизна картина після Declaration Instantiation:
+
+```text
+Function Environment Record {
+  a: <argument value>,
+  b: undefined,
+  inner: <function object>
+}
+```
+
+Але якщо у параметрах є **default value expressions**, специфікація створює окреме середовище для параметрів. Це потрібно, щоб default parameter expressions не бачили declarations з тіла функції.
+
+```javascript
+function demo(a = inner()) {
+  function inner() {
+    return 10;
+  }
+}
+
+demo(); // ReferenceError
+```
+
+Людське пояснення: `inner` записаний у тілі функції, а default value для `a` обчислюється **до входу в тіло**. Тому `inner` ще недоступний.
+
+```text
+Parameter Environment {
+  a: <evaluating default value>
+}
+
+Body Environment {
+  inner: <function object>
+}
+```
+
+> На цьому етапі не треба запам'ятовувати всі деталі parameter environment. Головне: параметри - це теж bindings, і вони готуються до виконання тіла функції.
+
+## Правило ієрархії: якщо імена збігаються
+
+**Теза:** Declaration Instantiation - це не просто "знайти всі імена". Якщо кілька declarations мають однакове ім'я, рушій застосовує правила пріоритету.
+
+Найважливіша ментальна модель:
+
+1. **Formal Parameters** створюють bindings при виклику функції.
+2. **Function Declarations** створюють готові function objects і можуть перезаписати binding з таким самим ім'ям.
+3. **var** створює binding тільки якщо такого імені ще немає; якщо binding уже є, `var` не скидає його в `undefined`.
+4. **let / const / class** не "програють" `var` чи `function`; у тому самому scope конфлікт імен зазвичай є **SyntaxError**.
+
+### I. `var` не перезаписує parameter
+
+```javascript
+function demo(a) {
+  var a;
+
+  console.log(a);
+}
+
+demo(10); // 10
+```
+
+#### Просте пояснення
+
+`a` вже існує як parameter binding і містить `10`. Рядок `var a;` не створює нову змінну і не записує туди `undefined`.
+
+#### Приблизний стан після Declaration Instantiation
+
+```text
+Function Environment Record {
+  a: 10
+}
+```
+
+`var a;` тут означає: "переконайся, що binding `a` існує". Він уже існує, тому нічого не змінюється.
+
+### II. Function declaration має вищий пріоритет за parameter
+
+```javascript
+function demo(a) {
+  console.log(typeof a);
+
+  function a() {}
+}
+
+demo(10); // "function"
+```
+
+#### Просте пояснення
+
+Спочатку `a` створюється як parameter і отримує `10`.
+Потім під час Declaration Instantiation function declaration `function a() {}` створює function object і записує його в binding `a`.
+
+Тому до виконання `console.log` ім'я `a` вже посилається не на `10`, а на функцію.
+
+#### Приблизний стан після Declaration Instantiation
+
+```text
+Heap {
+  @functionA: { type: "function", code: "function a() {}" }
+}
+
+Function Environment Record {
+  a: <reference to @functionA>
+}
+```
+
+### III. Function declaration має вищий пріоритет за `var`
+
+```javascript
+function demo() {
+  var x;
+
+  function x() {}
+
+  console.log(typeof x);
+}
+
+demo(); // "function"
+```
+
+#### Просте пояснення
+
+`function x() {}` створює готову функцію ще до виконання тіла.
+`var x;` не перезаписує її в `undefined`, бо binding `x` уже існує.
+
+```text
+Function Environment Record {
+  x: <function object>
+}
+```
+
+### IV. `let` / `const` / `class` не конкурують, а конфліктують
+
+```javascript
+function demo() {
+  var x;
+  let x;
+}
+```
+
+Цей код не доходить до виконання. Він падає ще на етапі підготовки з `SyntaxError`.
+
+#### Просте пояснення
+
+`var x` хоче створити function-scoped binding.
+`let x` хоче створити lexical binding у тому самому scope.
+Для такого дублювання специфікація не обирає "переможця". Вона забороняє код.
+
+Те саме стосується таких конфліктів:
+
+```javascript
+function demo(a) {
+  let a;
+}
+```
+
+```javascript
+function demo() {
+  function x() {}
+  const x = 1;
+}
+```
+
+Обидва приклади - `SyntaxError`.
+
+### Коротка таблиця пріоритетів
+
+| Конфлікт | Результат |
+|---|---|
+| `parameter a` + `var a` | parameter зберігає значення; `var` не скидає в `undefined` |
+| `parameter a` + `function a() {}` | function declaration записує function object у binding `a` |
+| `var x` + `function x() {}` | function declaration виграє під час Declaration Instantiation |
+| `var x` + `let x` у тому самому scope | `SyntaxError` |
+| `function x() {}` + `const x` у тому самому scope | `SyntaxError` |
+| `parameter a` + `let a` у тілі тієї самої функції | `SyntaxError` |
+
+### Візуальна модель
+
+```mermaid
+flowchart TD
+  A["Function call"] --> B["Create Function Execution Context"]
+  B --> C["Create parameter bindings"]
+  C --> D["Initialize parameters from arguments"]
+  D --> E["Create / initialize function declarations"]
+  E --> F["Create var bindings if missing"]
+  F --> G["Create lexical bindings: let / const / class"]
+  G --> H["Run function body"]
+
+  E --> E1["Can overwrite same-name parameter binding"]
+  F --> F1["Does not overwrite existing binding with undefined"]
+  G --> G1["Same-scope conflicts are SyntaxError"]
+```
+
+### Навіщо це знати?
+
+Це пояснює дивні кейси, де `var`, parameters і function declarations з однаковими іменами поводяться несиметрично.
+
+Без цього правила легко зробити неправильний висновок:
+
+> "`var` завжди стає `undefined` під час hoisting."
+
+Точніше так:
+
+> `var` ініціалізується як `undefined` тільки якщо він створює новий binding. Якщо binding з таким ім'ям уже створений parameter або function declaration, `var` не перезаписує його.
+
 ## Області видимості: `var` vs `let` / `const`
 
 **Теза:** Declaration Instantiation не можна зрозуміти без **Scope**. Саме scope відповідає на питання, **куди саме** буде записаний binding: у середовище функції чи в окремий блок `{ ... }`.
