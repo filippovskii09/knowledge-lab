@@ -12,6 +12,8 @@
 Цей механізм існує для підтримки ***нелінійності*** коду.
 Дозволяє функціям знати про існування одна одної, незалежно від того, в якому порядку вони записані
 
+> Глосарій до цієї теми: [glossary.md](./glossary.md)
+
 
 Приклад:
 ```
@@ -551,10 +553,131 @@ flowchart TD
 
 У JavaScript існує важлива різниця:
 
-- `var` бачить **function scope**;
+- `var` бачить **function scope**, а на верхньому рівні classic script потрапляє в global Object Environment Record;
 - `let` і `const` бачать **block scope**.
 
 Це означає, що один і той самий код у `if`, `for` або простому блоці `{ ... }` може створювати bindings у різних контейнерах залежно від типу declaration.
+
+---
+
+### Global Scope: подвійна структура глобального середовища
+
+**Теза:** У глобальному scope JavaScript не зберігає всі declarations в одному місці. **Global Environment Record** складається з двох частин: **Object Environment Record** для `var` / function declarations і **Declarative Environment Record** для `let` / `const` / `class`.
+
+#### Приклад
+Classic browser script:
+
+```javascript
+var version = "1.0";
+function boot() {}
+
+let mode = "production";
+const appName = "JS Lab";
+class App {}
+
+console.log(globalThis.version); // "1.0"
+console.log(globalThis.boot);    // function boot() {}
+
+console.log(globalThis.mode);    // undefined
+console.log(globalThis.appName); // undefined
+console.log(globalThis.App);     // undefined
+```
+
+#### Просте пояснення
+
+На глобальному рівні `var` і `function declaration` поводяться по-старому: вони не тільки створюють глобальні bindings, а ще й стають властивостями глобального об'єкта.
+
+У браузері цим глобальним об'єктом є `window`.
+У сучасному JS універсальна назва для нього — `globalThis`.
+
+Тому:
+
+```javascript
+var version = "1.0";
+
+console.log(version);            // "1.0"
+console.log(globalThis.version); // "1.0"
+```
+
+Але `let`, `const` і `class` працюють інакше. Вони теж глобальні, якщо оголошені на верхньому рівні classic script, але вони **не стають властивостями** глобального об'єкта.
+
+```javascript
+let mode = "production";
+
+console.log(mode);            // "production"
+console.log(globalThis.mode); // undefined
+```
+
+Людська модель:
+
+```text
+Global Environment Record
+  Object Environment Record
+    version -> "1.0"
+    boot -> <function object>
+    прив'язано до globalThis / window
+
+  Declarative Environment Record
+    mode -> "production"
+    appName -> "JS Lab"
+    App -> <class constructor>
+    приховано від globalThis / window
+```
+
+#### Технічне пояснення
+
+Під час **GlobalDeclarationInstantiation** рушій аналізує top-level declarations у script.
+
+Для classic script:
+
+1. `var` declarations створюють bindings в **Object Environment Record**.
+2. Function declarations на глобальному рівні теж створюють bindings в **Object Environment Record** і отримують готові function objects.
+3. Object Environment Record пов'язаний із **Global Object**.
+4. Через це `var version` і `function boot()` доступні як `globalThis.version` і `globalThis.boot`.
+5. `let`, `const` і `class` створюють bindings у **Declarative Environment Record**.
+6. Declarative Environment Record не є звичайним JS-об'єктом і не виставляє свої bindings як properties.
+
+Важлива різниця:
+
+| Declaration | Де лежить binding у global scope | Чи стає property на `globalThis` |
+| :--- | :--- | :--- |
+| `var x` | Object Environment Record | Так |
+| `function f() {}` | Object Environment Record | Так |
+| `let x` | Declarative Environment Record | Ні |
+| `const x` | Declarative Environment Record | Ні |
+| `class X {}` | Declarative Environment Record | Ні |
+
+#### Візуалізація
+```mermaid
+graph TD
+  A["GlobalDeclarationInstantiation"] --> B["Global Environment Record"]
+
+  B --> C["Object Environment Record"]
+  B --> D["Declarative Environment Record"]
+
+  C --> E["Binding Object: globalThis / window"]
+  C --> F["var version = undefined"]
+  C --> G["boot = <function object>"]
+
+  D --> H["let mode = <uninitialized>"]
+  D --> I["const appName = <uninitialized>"]
+  D --> J["class App = <uninitialized>"]
+
+  E --> K["globalThis.version exists"]
+  E --> L["globalThis.boot exists"]
+
+  H --> M["globalThis.mode does not exist"]
+  I --> N["globalThis.appName does not exist"]
+  J --> O["globalThis.App does not exist"]
+```
+
+#### Edge Cases / Підводні камені
+
+> **Classic script vs ES module:** цей розділ описує top-level code у classic script. В ES modules top-level declarations є module-scoped. Тобто навіть `var x` на верхньому рівні модуля не стає `globalThis.x`.
+
+> **Node.js CommonJS:** у звичайному файлі Node.js top-level code загорнутий у module wrapper. Тому `var x` на верхньому рівні файлу не дорівнює `global.x`. Це не справжній browser global script.
+
+> **Практичний висновок:** якщо бачиш `globalThis.someName`, це майже завжди наслідок старого global `var` або global function declaration. `let` / `const` / `class` так не протікають у глобальний об'єкт.
 
 ---
 
